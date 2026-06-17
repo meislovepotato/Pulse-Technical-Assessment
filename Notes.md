@@ -56,3 +56,29 @@ GET /api/poll?id=<id> 200
 ### Additional Notes
 
 The polling endpoint consistently responds in approximately 500ms. This appears to be expected behavior from the application's polling/long-polling implementation and is not related to database performance or Prisma.
+
+
+## Fix: Presence Rows Never Expired
+
+### Issue
+
+User dots remained visible on the map after users closed the app.
+
+### Root Cause
+
+The polling endpoint refreshed `lastSeen` for all presence records on every poll request. Because every row was continuously updated, no presence record could become stale and expire.
+
+### Resolution
+
+Updated the heartbeat logic to refresh only the requesting user's presence record (`where: { id }`) instead of all rows.
+
+### Verification
+
+1. Open two clients and join the map.
+2. Close one client.
+3. Wait longer than `STALE_MS` (15 seconds by default).
+4. Confirm the closed client's dot disappears from the remaining client's map.
+
+### Result
+
+Inactive users now expire correctly and are removed from the map once their `lastSeen` timestamp exceeds the stale timeout.
