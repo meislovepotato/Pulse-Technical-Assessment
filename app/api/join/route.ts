@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 // POST /api/join — body { id, lat, lng } (raw coords).
 // Applies a 1–3 km privacy offset and upserts the presence row. Raw
 // coordinates are never stored.
+
 export async function POST(request: NextRequest) {
   let body: unknown;
   try {
@@ -43,5 +44,14 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  /*
+  // Log for debugging: who joined and their offset coords.
+  try {
+    // eslint-disable-next-line no-console
+    console.log(
+      `[join] id=${id} lat=${offset.lat.toFixed(5)} lng=${offset.lng.toFixed(5)}`,
+    );
+  } catch {}
+  */
   return Response.json({ ok: true });
 }
