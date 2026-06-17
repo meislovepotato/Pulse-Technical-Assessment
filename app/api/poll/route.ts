@@ -23,14 +23,18 @@ export async function GET(request: NextRequest) {
 
   // 1) Heartbeat — refresh lastSeen for the caller.
   await prisma.presence.updateMany({
-    where: {},
+    where: { id },
     data: { lastSeen: new Date(now) },
   });
 
   // 2) Reap stale presence rows and orphaned signals (independent deletes —
   // no atomicity needed, and avoids transactions over a PgBouncer pooler).
-  await prisma.presence.deleteMany({ where: { lastSeen: { lt: staleCutoff } } });
-  await prisma.signal.deleteMany({ where: { createdAt: { lt: signalCutoff } } });
+  await prisma.presence.deleteMany({
+    where: { lastSeen: { lt: staleCutoff } },
+  });
+  await prisma.signal.deleteMany({
+    where: { createdAt: { lt: signalCutoff } },
+  });
 
   // 3) Online peers, excluding self.
   const peers = await prisma.presence.findMany({
