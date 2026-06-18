@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function POST(_request: NextRequest) {
   const now = Date.now();
-    
+
   // Add small safety buffer to prevent race flicker
   const staleCutoff = new Date(now - (STALE_MS + 5000));
   const signalCutoff = new Date(now - SIGNAL_TTL_MS);
@@ -23,6 +23,11 @@ export async function POST(_request: NextRequest) {
 
   const signalResult = await prisma.signal.deleteMany({
     where: { createdAt: { lt: signalCutoff } },
+  });
+
+  await prisma.presence.updateMany({
+    where: { lastSeen: { lt: staleCutoff } },
+    data: { busy: false },
   });
 
   return Response.json({
