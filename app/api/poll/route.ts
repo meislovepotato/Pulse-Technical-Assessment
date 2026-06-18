@@ -60,18 +60,25 @@ export async function GET(request: NextRequest) {
       where: { toId: id },
       orderBy: { createdAt: "asc" },
     });
-    if (msgs.length > 0) {
-      const ids = msgs.map((m) => m.id);
-      await tx.signal.deleteMany({ where: { id: { in: ids } } });
-    }
+
     const validSignals = msgs.filter((s) => {
       const age = Date.now() - new Date(s.createdAt).getTime();
       return age < STALE_MS * 2; // safety window
     });
+
+    if (validSignals.length > 0) {
+      await tx.signal.deleteMany({
+        where: {
+          id: {
+            in: validSignals.map((s) => s.id),
+          },
+        },
+      });
+    }
     return validSignals;
   });
 
-  // 4. Read this user's mailbox (no deletion in poll)
+  // 4. Consume this user's mailbox.
   const peersWithStatus = peers.map((p) => {
     const isStale = Date.now() - new Date(p.lastSeen).getTime() > STALE_MS;
 
