@@ -57,7 +57,6 @@ GET /api/poll?id=<id> 200
 
 The polling endpoint consistently responds in approximately 500ms. This appears to be expected behavior from the application's polling/long-polling implementation and is not related to database performance or Prisma.
 
-
 ## Fix: Presence Rows Never Expired
 
 ### Issue
@@ -83,16 +82,15 @@ Updated the heartbeat logic to refresh only the requesting user's presence recor
 
 Inactive users now expire correctly and are removed from the map once their `lastSeen` timestamp exceeds the stale timeout.
 
-
 # Fix: Race Condition in Presence Cleanup (Polling System Instability)
 
 ## Issue
 
 The live map occasionally showed inconsistent behavior where users would:
 
-- appear online briefly  
-- disappear unexpectedly  
-- show `peers=0` even when active users existed  
+- appear online briefly
+- disappear unexpectedly
+- show `peers=0` even when active users existed
 
 This was especially noticeable on mobile devices due to polling delays and background throttling.
 
@@ -122,6 +120,7 @@ As a result:
 The system was refactored into a clear separation of concerns:
 
 ### `/api/poll`
+
 - Only updates `lastSeen` for the requesting user (heartbeat)
 - Only reads data (peers + signals)
 - ❌ No deletions
@@ -130,6 +129,7 @@ The system was refactored into a clear separation of concerns:
 ---
 
 ### `/api/cleanup`
+
 - Sole authority for stale data removal
 - Deletes:
   - inactive presence rows (`lastSeen < STALE_MS`)
@@ -139,6 +139,7 @@ The system was refactored into a clear separation of concerns:
 ---
 
 ### `/api/join`
+
 - Remains responsible for creating/updating presence only
 - Applies privacy offset and updates location + `lastSeen`
 
@@ -152,17 +153,14 @@ To trace the issue, lightweight server logs were added:
 
 [poll] id=<userId> peers=<count> ids=<peerIds>
 
-
 Example:
 
 [poll] id=e55... peers=1 ids=cf68...
 [poll] id=e55... peers=0 ids=
 
-
 ### Join logs
 
 [join] id=<userId> lat=<lat> lng=<lng>
-
 
 ---
 
@@ -174,11 +172,9 @@ Phone -> online
 PC -> online
 Result: both see each other
 
-
 ---
 
 ### Scenario 2: Failure case (before fix)
-
 
 Phone -> online
 Phone -> offline
@@ -187,28 +183,25 @@ Phone -> online again
 PC -> does NOT see phone return
 (peers stays 0 or stale)
 
-
 ---
 
 ### Scenario 3: Observed unstable polling
-
 
 [poll] peers=1 (phone visible)
 [poll] peers=0 (phone suddenly disappears)
 [poll] peers=1 (reappears briefly)
 [poll] peers=0 (stays missing)
 
-
 ---
 
 ## Verification
 
-1. Open two clients and join the map  
-2. Confirm both users appear online  
-3. Close one client  
-4. Wait longer than `STALE_MS`  
-5. Confirm user disappears consistently without flicker  
-6. Reconnect client and confirm presence restores correctly  
+1. Open two clients and join the map
+2. Confirm both users appear online
+3. Close one client
+4. Wait longer than `STALE_MS`
+5. Confirm user disappears consistently without flicker
+6. Reconnect client and confirm presence restores correctly
 
 ---
 
@@ -227,8 +220,6 @@ Presence state is now stable and deterministic:
 
 This refactor changes the system from a **client-driven cleanup model** to a **server-authoritative presence model**, eliminating race conditions caused by concurrent polling operations.
 
-
-
 # Additional Fixes: Signaling Reliability & Duplicate Request Prevention
 
 ## Fix: Simultaneous Request Deadlock (Duplicate Request Handling)
@@ -237,10 +228,10 @@ This refactor changes the system from a **client-driven cleanup model** to a **s
 
 When two users clicked each other at the same time:
 
-* Both sides emitted `"request"` signals simultaneously
-* Both entered `"requesting"` state
-* Both systems waited for the other to resolve first
-* Result: stuck or inconsistent connection state
+- Both sides emitted `"request"` signals simultaneously
+- Both entered `"requesting"` state
+- Both systems waited for the other to resolve first
+- Result: stuck or inconsistent connection state
 
 ### Root Cause
 
@@ -256,15 +247,15 @@ const selfWins = sessionId > sig.fromId;
 
 When both users initiate a request at the same time:
 
-* Only one side is allowed to proceed as initiator
-* The other side resolves the connection consistently
-* Prevents duplicate negotiation flows
+- Only one side is allowed to proceed as initiator
+- The other side resolves the connection consistently
+- Prevents duplicate negotiation flows
 
 ### Result
 
-* Eliminated dual-request deadlocks
-* Prevented mirrored “requesting ↔ requesting” loops
-* Ensured only one WebRTC negotiation path is active per pair
+- Eliminated dual-request deadlocks
+- Prevented mirrored “requesting ↔ requesting” loops
+- Ensured only one WebRTC negotiation path is active per pair
 
 ---
 
@@ -274,9 +265,9 @@ When both users initiate a request at the same time:
 
 Under delayed or repeated polling conditions:
 
-* The same request signal could be processed multiple times
-* Users could re-trigger connection logic from stale inbox data
-* This caused inconsistent UI states (multiple transitions or stuck requesting)
+- The same request signal could be processed multiple times
+- Users could re-trigger connection logic from stale inbox data
+- This caused inconsistent UI states (multiple transitions or stuck requesting)
 
 ### Fix
 
@@ -288,15 +279,15 @@ const processedSignalIds = useRef(new Set<string>());
 
 Before processing any signal:
 
-* Check if signal ID was already handled
-* Ignore duplicates safely
-* Ensure each signal is processed exactly once per session
+- Check if signal ID was already handled
+- Ignore duplicates safely
+- Ensure each signal is processed exactly once per session
 
 ### Result
 
-* No repeated request handling
-* No duplicate state transitions
-* Stable single-pass signal processing
+- No repeated request handling
+- No duplicate state transitions
+- Stable single-pass signal processing
 
 ---
 
@@ -306,25 +297,24 @@ Before processing any signal:
 
 If both peers were in `"requesting"` state and received each other’s request:
 
-* Both would independently try to resolve the connection
-* Could lead to both sides sending `"accept"` simultaneously
-* Resulted in race condition during connection setup
+- Both would independently try to resolve the connection
+- Could lead to both sides sending `"accept"` simultaneously
+- Resulted in race condition during connection setup
 
 ### Fix
 
 Centralized resolution logic inside `"request"` handler:
 
-* If both sides are requesting each other:
-
-  * apply deterministic winner rule
-  * convert one side into initiator
-  * prevent dual accept execution
+- If both sides are requesting each other:
+  - apply deterministic winner rule
+  - convert one side into initiator
+  - prevent dual accept execution
 
 ### Result
 
-* One consistent initiator per session
-* No conflicting accept/accept race
-* Stable connection handshake ordering
+- One consistent initiator per session
+- No conflicting accept/accept race
+- Stable connection handshake ordering
 
 ---
 
@@ -332,8 +322,85 @@ Centralized resolution logic inside `"request"` handler:
 
 This change improves **signal reliability only**, specifically:
 
-* Prevents duplicate request processing
-* Removes simultaneous request deadlocks
-* Ensures deterministic resolution when both users initiate at once
-* Adds client-side signal deduplication safety
+- Prevents duplicate request processing
+- Removes simultaneous request deadlocks
+- Ensures deterministic resolution when both users initiate at once
+- Adds client-side signal deduplication safety
 
+## Fix: Peer Disconnect During Connection Flow (Stuck "Connecting" State)
+
+### Issue
+
+A race condition occurs when a peer disconnects during the connection handshake.
+
+#### Example flow:
+
+```
+User1 -> request -> User2
+```
+
+User2 sees:
+
+```
+[Accept] [Decline]
+```
+
+If User1 closes the tab or loses connection:
+
+- User1 stops polling
+- User1 is removed from presence after cleanup
+- User2 still sees the incoming prompt
+
+If User2 then clicks **Accept**, the system proceeds normally:
+
+- `startPeer(peerId, false)`
+- `sendSignal("accept")`
+- state becomes:
+
+```
+{ kind: "connecting" }
+```
+
+At this point:
+
+- User1 no longer exists
+- No WebRTC answer is ever received
+- No ICE candidates arrive
+- `onChannelOpen()` is never triggered
+
+Result: User2 becomes permanently stuck in **Connecting...**
+
+---
+
+### Root Cause
+
+The frontend does not validate whether the target peer still exists in the latest presence list before proceeding with a connection attempt.
+
+Although polling updates `peers`, the connection logic never checks:
+
+> "Is the peer I'm trying to connect to still online?"
+
+---
+
+### Solution
+
+During each polling cycle, after updating the peer list:
+
+```
+setPeers(data.peers);
+```
+
+the client must verify that the currently active peer still exists in the server-provided presence list.
+
+If the peer is no longer present:
+
+- Immediately abort the connection flow
+- Clear pending connection state
+- Return the UI to a safe state
+
+Conceptually:
+
+- If `incoming` → reset to idle (safe cancel prompt)
+- If `requesting / connecting / connected` → teardown session
+
+Optionally, instead of hard resetting, a `peer-offline` state can be introduced to show a clearer UX message before resetting.
