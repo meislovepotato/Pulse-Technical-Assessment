@@ -226,3 +226,114 @@ Presence state is now stable and deterministic:
 ## Additional Notes
 
 This refactor changes the system from a **client-driven cleanup model** to a **server-authoritative presence model**, eliminating race conditions caused by concurrent polling operations.
+
+
+
+# Additional Fixes: Signaling Reliability & Duplicate Request Prevention
+
+## Fix: Simultaneous Request Deadlock (Duplicate Request Handling)
+
+### Issue
+
+When two users clicked each other at the same time:
+
+* Both sides emitted `"request"` signals simultaneously
+* Both entered `"requesting"` state
+* Both systems waited for the other to resolve first
+* Result: stuck or inconsistent connection state
+
+### Root Cause
+
+No deterministic resolution strategy existed for concurrent requests between two peers.
+
+### Fix
+
+Introduced a **deterministic tie-break rule** using `sessionId` comparison:
+
+```ts
+const selfWins = sessionId > sig.fromId;
+```
+
+When both users initiate a request at the same time:
+
+* Only one side is allowed to proceed as initiator
+* The other side resolves the connection consistently
+* Prevents duplicate negotiation flows
+
+### Result
+
+* Eliminated dual-request deadlocks
+* Prevented mirrored “requesting ↔ requesting” loops
+* Ensured only one WebRTC negotiation path is active per pair
+
+---
+
+## Fix: Duplicate / Stale Signal Handling in Request Flow
+
+### Issue
+
+Under delayed or repeated polling conditions:
+
+* The same request signal could be processed multiple times
+* Users could re-trigger connection logic from stale inbox data
+* This caused inconsistent UI states (multiple transitions or stuck requesting)
+
+### Fix
+
+Added **signal deduplication layer in the client**:
+
+```ts
+const processedSignalIds = useRef(new Set<string>());
+```
+
+Before processing any signal:
+
+* Check if signal ID was already handled
+* Ignore duplicates safely
+* Ensure each signal is processed exactly once per session
+
+### Result
+
+* No repeated request handling
+* No duplicate state transitions
+* Stable single-pass signal processing
+
+---
+
+## Fix: Request Collision Resolution (Request vs Request)
+
+### Issue
+
+If both peers were in `"requesting"` state and received each other’s request:
+
+* Both would independently try to resolve the connection
+* Could lead to both sides sending `"accept"` simultaneously
+* Resulted in race condition during connection setup
+
+### Fix
+
+Centralized resolution logic inside `"request"` handler:
+
+* If both sides are requesting each other:
+
+  * apply deterministic winner rule
+  * convert one side into initiator
+  * prevent dual accept execution
+
+### Result
+
+* One consistent initiator per session
+* No conflicting accept/accept race
+* Stable connection handshake ordering
+
+---
+
+## Summary
+
+This change improves **signal reliability only**, specifically:
+
+* Prevents duplicate request processing
+* Removes simultaneous request deadlocks
+* Ensures deterministic resolution when both users initiate at once
+* Adds client-side signal deduplication safety
+

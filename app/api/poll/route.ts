@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   await prisma.presence.updateMany({
     where: { id },
     data: { lastSeen: new Date() },
-  }); 
+  });
 
   // NOTE: Cleanup must NOT run inside poll — server-owned only. See
   // /api/cleanup for TTL and stale presence reaping.
