@@ -404,3 +404,24 @@ Conceptually:
 - If `requesting / connecting / connected` → teardown session
 
 Optionally, instead of hard resetting, a `peer-offline` state can be introduced to show a clearer UX message before resetting.
+
+
+
+
+## Fix: Chat messages not appearing (WebRTC DataChannel)
+
+### Root cause
+
+Chat messages were not being received because the sender and receiver used different message types.
+
+The sender was sending messages with type `"msg"`, while the receiver was only handling messages with type `"chat"`. As a result, incoming messages were ignored.
+
+### Fix
+
+Standardized the chat message type so both sender and receiver use `"chat"`.
+
+### Why it was silent
+
+Incoming DataChannel messages are parsed inside a try/catch block that ignores errors, so any unexpected message format failed without showing an error, making the issue appear as if messages were not sent at all.
+
+
