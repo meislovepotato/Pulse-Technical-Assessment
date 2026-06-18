@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import EntryGate from "./components/EntryGate";
 import WorldMap from "./components/WorldMap";
 import ConnectionPrompt from "./components/ConnectionPrompt";
@@ -16,7 +16,8 @@ type Conn =
   | { kind: "requesting"; peerId: string }
   | { kind: "incoming"; peerId: string }
   | { kind: "connecting"; peerId: string }
-  | { kind: "connected"; peerId: string };
+  | { kind: "connected"; peerId: string }
+  | { kind: "peer-offline"; peerId: string };
 
 type VideoState = "none" | "requesting" | "incoming" | "active";
 
@@ -55,7 +56,7 @@ export default function Home() {
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<number | null>(null);
 
-  function showNotice(text: string) {
+  const showNotice = useCallback((text: string) => {
     setNotice(text);
 
     if (noticeTimer.current !== null) {
@@ -65,23 +66,29 @@ export default function Home() {
     noticeTimer.current = window.setTimeout(() => {
       setNotice(null);
     }, 3500);
-  }
+  }, []);
 
   function addMessage(mine: boolean, text: string) {
     setMessages((prev) => [...prev, { id: msgId.current++, mine, text }]);
   }
 
-  function teardown(message?: string) {
-    if (requestTimer.current) clearTimeout(requestTimer.current);
-    peerRef.current?.close();
-    peerRef.current = null;
-    setLocalStream(null);
-    setRemoteStream(null);
-    setVideo("none");
-    setMessages([]);
-    setConn({ kind: "idle" });
-    if (message) showNotice(message);
-  }
+  const teardown = useCallback(
+    (message?: string) => {
+      if (requestTimer.current) {
+        clearTimeout(requestTimer.current);
+        requestTimer.current = null;
+      }
+      peerRef.current?.close();
+      peerRef.current = null;
+      setLocalStream(null);
+      setRemoteStream(null);
+      setVideo("none");
+      setMessages([]);
+      setConn({ kind: "idle" });
+      if (message) showNotice(message);
+    },
+    [showNotice],
+  );
 
   function startPeer(peerId: string, initiator: boolean) {
     const ps = new PeerSession(initiator, {
@@ -97,6 +104,10 @@ export default function Home() {
         }
       },
       onChannelOpen: () => {
+        if (requestTimer.current) {
+          clearTimeout(requestTimer.current);
+          requestTimer.current = null;
+        }
         setConn({ kind: "connected", peerId });
       },
     });
@@ -156,9 +167,12 @@ export default function Home() {
       ) {
         void sendSignal(sessionId, peerId, "end");
         teardown("No answer.");
+        requestTimer.current = null;
       }
     }, REQUEST_TIMEOUT_MS);
   }
+
+  
 
   function cancelRequest() {
     if (connRef.current.kind === "requesting") {
@@ -173,6 +187,7 @@ export default function Home() {
     startPeer(peerId, false);
     void sendSignal(sessionId, peerId, "accept");
     setConn({ kind: "connecting", peerId });
+    
   }
 
   function declineIncoming() {
@@ -239,11 +254,13 @@ export default function Home() {
             startPeer(sig.fromId, true);
             void sendSignal(sessionId, sig.fromId, "accept");
             setConn({ kind: "connecting", peerId: sig.fromId });
+            
           } else {
             // we lose → accept theirs
             void sendSignal(sessionId, sig.fromId, "accept");
             startPeer(sig.fromId, false);
             setConn({ kind: "connecting", peerId: sig.fromId });
+            
           }
           break;
         }
@@ -258,16 +275,23 @@ export default function Home() {
       case "accept": {
         const c = connRef.current;
         if (c.kind === "requesting" && c.peerId === sig.fromId) {
-          if (requestTimer.current) clearTimeout(requestTimer.current);
+          if (requestTimer.current) {
+            clearTimeout(requestTimer.current);
+            requestTimer.current = null;
+          }
           startPeer(sig.fromId, true);
           setConn({ kind: "connecting", peerId: sig.fromId });
+          
         }
         break;
       }
       case "decline": {
         const c = connRef.current;
         if (c.kind === "requesting" && c.peerId === sig.fromId) {
-          if (requestTimer.current) clearTimeout(requestTimer.current);
+          if (requestTimer.current) {
+            clearTimeout(requestTimer.current);
+            requestTimer.current = null;
+          }
           teardown("Request declined.");
         }
         break;
@@ -331,12 +355,49 @@ export default function Home() {
         const data = await poll(sessionId);
         if (!active) return;
         setPeers(data.peers);
+
+        // If our current peer disappeared from the server list, abort safely.
+        const c = connRef.current;
+        if (
+          c.kind === "requesting" ||
+          c.kind === "incoming" ||
+          c.kind === "connecting" ||
+          c.kind === "connected"
+        ) {
+          const peerStillHere = data.peers.some((p) => p.id === c.peerId);
+          if (!peerStillHere) {
+            if (c.kind === "incoming") {
+              setConn({ kind: "idle" });
+              showNotice("The stranger went offline.");
+            } else {
+              if (requestTimer.current) {
+                clearTimeout(requestTimer.current);
+                requestTimer.current = null;
+              }
+              teardown("The stranger went offline.");
+            }
+            // skip processing signals this tick
+            if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
+            return;
+          }
+        }
+
         for (const s of data.signals) {
           if (processedSignalIds.current.has(s.id)) continue;
           processedSignalIds.current.add(s.id);
           processSignalRef.current(s);
         }
-      } catch {}
+      } catch {
+        const c = connRef.current;
+
+        if (
+          c.kind === "requesting" ||
+          c.kind === "incoming" ||
+          c.kind === "connecting"
+        ) {
+          teardown("Connection lost.");
+        }
+      }
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
     };
     tick();
@@ -345,7 +406,7 @@ export default function Home() {
       active = false;
       if (timer) clearTimeout(timer);
     };
-  }, [phase, sessionId]);
+  }, [phase, sessionId, teardown, showNotice]);
 
   useEffect(() => {
     if (!sessionId || phase !== "live") return;

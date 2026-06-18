@@ -54,9 +54,7 @@ export async function GET(request: NextRequest) {
   } catch {}
   */
 
-  // 3. Fetch signals and remove them atomically so the same signal isn't
-  // delivered repeatedly across multiple polls. We read the rows and delete
-  // them in a single transaction, returning the fetched messages.
+  // 3. Fetch signals
   const inbox = await prisma.$transaction(async (tx) => {
     const msgs = await tx.signal.findMany({
       where: { toId: id },
