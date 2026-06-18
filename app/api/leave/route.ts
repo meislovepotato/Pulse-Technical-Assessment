@@ -25,7 +25,14 @@ export async function POST(request: NextRequest) {
   await prisma.signal.deleteMany({
     where: { OR: [{ toId: id }, { fromId: id }] },
   });
-  await prisma.presence.deleteMany({ where: { id } });
 
+  await prisma.presence.updateMany({
+    where: { id },
+    data: {
+      busy: false,
+      lastSeen: new Date(0), // forces immediate stale
+    },
+  });
+  
   return Response.json({ ok: true });
 }

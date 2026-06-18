@@ -25,9 +25,12 @@ export async function POST(_request: NextRequest) {
     where: { createdAt: { lt: signalCutoff } },
   });
 
-  await prisma.presence.updateMany({
+  await prisma.presence.deleteMany({
     where: { lastSeen: { lt: staleCutoff } },
-    data: { busy: false },
+  });
+
+  await prisma.signal.deleteMany({
+    where: { createdAt: { lt: signalCutoff } },
   });
 
   return Response.json({
