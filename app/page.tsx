@@ -30,9 +30,10 @@ export default function Home() {
   const [notice, setNotice] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-  const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(
-    null,
-  );
+  const [myLocation, setMyLocation] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
 
   const [conn, _setConn] = useState<Conn>({ kind: "idle" });
   const connRef = useRef<Conn>(conn);
@@ -48,13 +49,22 @@ export default function Home() {
     _setVideo(v);
   };
 
+  const pendingSignals = useRef<SignalMsg[]>([]);
   const peerRef = useRef<PeerSession | null>(null);
   const msgId = useRef(0);
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const noticeTimer = useRef<number| null>(null);
+  
   function showNotice(text: string) {
     setNotice(text);
-    window.setTimeout(() => setNotice(null), 3500);
+
+    if (noticeTimer.current !== null) {
+      clearTimeout(noticeTimer.current);
+    }
+
+    noticeTimer.current = window.setTimeout(() => {
+      setNotice(null);
+    }, 3500);
   }
 
   function addMessage(mine: boolean, text: string) {
@@ -91,6 +101,13 @@ export default function Home() {
       },
     });
     peerRef.current = ps;
+
+    const queued = pendingSignals.current;
+    pendingSignals.current = [];
+
+    for (const sig of queued) {
+      void ps.handleSignal(sig.type as DescType, sig.payload ?? "");
+    }
   }
 
   function handleControl(ctrl: PeerControl) {
@@ -241,12 +258,20 @@ export default function Home() {
         const c = connRef.current;
         const peerId =
           c.kind === "connecting" || c.kind === "connected" ? c.peerId : null;
-        if (peerRef.current && peerId === sig.fromId) {
-          void peerRef.current.handleSignal(
-            sig.type as DescType,
-            sig.payload ?? "",
-          );
+        if (peerId !== sig.fromId) {
+          break;
         }
+
+        if (!peerRef.current) {
+          pendingSignals.current.push(sig);
+          break;
+        }
+
+        void peerRef.current.handleSignal(
+          sig.type as DescType,
+          sig.payload ?? "",
+        );
+
         break;
       }
       case "end": {
@@ -270,6 +295,12 @@ export default function Home() {
     processSignalRef.current = processSignal;
   });
 
+  // Avoid processing the same signal multiple times in the frontend in case
+  // the server returns duplicates (e.g. before cleanup runs). We keep a
+  // small in-memory set of processed signal ids for the lifetime of this
+  // session.
+  const processedSignalIds = useRef(new Set<string>());
+
   useEffect(() => {
     if (phase !== "live" || !sessionId) return;
     let active = true;
@@ -280,7 +311,11 @@ export default function Home() {
         const data = await poll(sessionId);
         if (!active) return;
         setPeers(data.peers);
-        for (const s of data.signals) processSignalRef.current(s);
+        for (const s of data.signals) {
+          if (processedSignalIds.current.has(s.id)) continue;
+          processedSignalIds.current.add(s.id);
+          processSignalRef.current(s);
+        }
       } catch {}
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
     };

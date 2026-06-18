@@ -55,14 +55,20 @@ export async function GET(request: NextRequest) {
   } catch {}
   */
 
-  // 3. Fetch signals (read only)
-  const inbox = await prisma.signal.findMany({
-    where: { toId: id },
-    orderBy: { createdAt: "asc" },
+  // 3. Fetch signals and remove them atomically so the same signal isn't
+  // delivered repeatedly across multiple polls. We read the rows and delete
+  // them in a single transaction, returning the fetched messages.
+  const inbox = await prisma.$transaction(async (tx) => {
+    const msgs = await tx.signal.findMany({
+      where: { toId: id },
+      orderBy: { createdAt: "asc" },
+    });
+    if (msgs.length > 0) {
+      const ids = msgs.map((m) => m.id);
+      await tx.signal.deleteMany({ where: { id: { in: ids } } });
+    }
+    return msgs;
   });
-
-  // NOTE: Poll should be read-only (aside from lastSeen). Do NOT delete
-  // signals here — server-side cleanup will remove old signals.
 
   // 4. Read this user's mailbox (no deletion in poll)
   const response: PollResponse = {

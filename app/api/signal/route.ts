@@ -53,18 +53,41 @@ export async function POST(request: NextRequest) {
   // Enforce "one active connection at a time": if the target is already busy,
   // auto-decline the request instead of delivering it.
   if (signalType === "request") {
-    const target = await prisma.presence.findUnique({
-      where: { id: toId },
-      select: { busy: true },
+    const allowed = await prisma.$transaction(async (tx) => {
+      const target = await tx.presence.findUnique({
+        where: { id: toId },
+        select: { busy: true },
+      });
+
+      if (!target) {
+        return false;
+      }
+
+      if (target.busy) {
+        return false;
+      }
+
+      const existingRequest = await tx.signal.findFirst({
+        where: {
+          toId,
+          type: "request",
+        },
+      });
+
+      if (existingRequest) {
+        return false;
+      }
+
+      return true;
     });
-    if (!target) {
-      // Target went offline — tell the initiator it was declined.
+
+    if (!allowed) {
       await sendDecline(toId, fromId);
-      return Response.json({ ok: true, autoDeclined: true });
-    }
-    if (target.busy) {
-      await sendDecline(toId, fromId);
-      return Response.json({ ok: true, autoDeclined: true });
+
+      return Response.json({
+        ok: true,
+        autoDeclined: true,
+      });
     }
   }
 
@@ -73,16 +96,23 @@ export async function POST(request: NextRequest) {
   // - decline/end: free both peers.
   if (signalType === "accept") {
     await prisma.presence.updateMany({
-      where: { id: { in: [fromId, toId] } },
-      data: { busy: true },
+      where: {
+        id: { in: [fromId, toId] },
+      },
+      data: {
+        busy: true,
+      },
     });
-  } else if (signalType === "decline") {
+  } else if (signalType === "decline" || signalType === "end") {
     await prisma.presence.updateMany({
-      where: { id: { in: [fromId, toId] } },
-      data: { busy: false },
+      where: {
+        id: { in: [fromId, toId] },
+      },
+      data: {
+        busy: false,
+      },
     });
   }
-
   await prisma.signal.create({
     data: { fromId, toId, type: signalType, payload: payloadStr },
   });
@@ -93,6 +123,11 @@ export async function POST(request: NextRequest) {
 // Helper: deliver an auto-decline from `target` back to `initiator`.
 async function sendDecline(targetId: string, initiatorId: string) {
   await prisma.signal.create({
-    data: { fromId: targetId, toId: initiatorId, type: "decline", payload: null },
+    data: {
+      fromId: targetId,
+      toId: initiatorId,
+      type: "decline",
+      payload: null,
+    },
   });
 }
