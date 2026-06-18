@@ -405,9 +405,6 @@ Conceptually:
 
 Optionally, instead of hard resetting, a `peer-offline` state can be introduced to show a clearer UX message before resetting.
 
-
-
-
 ## Fix: Chat messages not appearing (WebRTC DataChannel)
 
 ### Root cause
@@ -424,4 +421,72 @@ Standardized the chat message type so both sender and receiver use `"chat"`.
 
 Incoming DataChannel messages are parsed inside a try/catch block that ignores errors, so any unexpected message format failed without showing an error, making the issue appear as if messages were not sent at all.
 
+## FIX: WebRTC Chat Issue: One-Way Messages
 
+### Issue
+
+After a successful connection:
+
+User1 → request connection → User2
+User2 → accepts
+User1 ↔ User2 connected
+
+The chat behaved incorrectly:
+
+User2 → User1 messages ✅ worked
+User1 → User2 messages ❌ did not arrive
+
+The WebRTC connection appeared established, but the data channel was not fully synchronized.
+
+---
+
+### Root Cause
+
+The issue was caused by the WebRTC negotiation flow in `webrtc.ts`.
+
+Two problems were involved:
+
+1. **ICE candidates were processed before the remote description was set**
+
+The previous order was:
+
+receive offer/answer
+↓
+add ICE candidates
+↓
+set remote description
+
+ICE candidates depend on the remote SDP being available. Processing them too early caused incomplete negotiation and could leave the data channel in a partially working state.
+
+2. **The data channel reference could be replaced during negotiation**
+
+The receiving peer could overwrite an existing data channel handler, causing one side to hold an invalid or inactive channel reference.
+
+---
+
+### Solution
+
+Updated the WebRTC flow:
+
+receive offer/answer
+↓
+set remote description
+↓
+apply queued ICE candidates
+↓
+open data channel
+↓
+enable chat communication
+
+Changes made:
+
+- Moved `setRemoteDescription()` before ICE candidate flushing.
+- Prevented duplicate data channel assignment.
+- Added data channel lifecycle handling (`open`, `close`, `error`).
+- Added validation before sending messages.
+
+After the fix:
+
+User1 → User2 messages
+User2 → User1 messages
+Both peers now have a synchronized RTCDataChannel after connection.
