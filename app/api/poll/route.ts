@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
 
   // 1) Heartbeat — refresh lastSeen for the caller.
   await prisma.presence.updateMany({
-    where: { lastSeen: { lt: staleCutoff }, busy: true },
-    data: { busy: false },
-  });
+    where: { id },
+    data: { lastSeen: new Date() },
+  }); 
 
   // NOTE: Cleanup must NOT run inside poll — server-owned only. See
   // /api/cleanup for TTL and stale presence reaping.
