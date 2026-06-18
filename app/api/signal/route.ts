@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { SignalType } from "@/lib/types";
+import { STALE_MS } from "@/lib/presence";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ const MAX_PAYLOAD = 64 * 1024; // SDP/ICE are small; cap to be safe.
 // flag so a user can only be in one connection at a time.
 export async function POST(request: NextRequest) {
   let body: unknown;
+
   try {
     body = await request.json();
   } catch {
@@ -50,16 +52,52 @@ export async function POST(request: NextRequest) {
   const signalType = type as SignalType;
   const payloadStr = typeof payload === "string" ? payload : null;
 
-  // Enforce "one active connection at a time": if the target is already busy,
-  // auto-decline the request instead of delivering it.
+  // Validate sender first.
+  // Prevents stale clients from changing busy state.
+  const sender = await prisma.presence.findUnique({
+    where: {
+      id: fromId,
+    },
+    select: {
+      lastSeen: true,
+    },
+  });
+
+  if (!sender) {
+    return Response.json(
+      {
+        error: "sender offline",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
+  if (Date.now() - sender.lastSeen.getTime() > STALE_MS) {
+    return Response.json(
+      {
+        error: "sender stale",
+      },
+      {
+        status: 409,
+      },
+    );
+  }
+
+  // Requests require target availability.
   if (signalType === "request") {
     const allowed = await prisma.$transaction(async (tx) => {
       const target = await tx.presence.findUnique({
         where: { id: toId },
-        select: { busy: true },
+        select: { busy: true, lastSeen: true },
       });
 
       if (!target) {
+        return false;
+      }
+
+      if (Date.now() - target.lastSeen.getTime() > STALE_MS) {
         return false;
       }
 
@@ -82,12 +120,21 @@ export async function POST(request: NextRequest) {
     });
 
     if (!allowed) {
-      await sendDecline(toId, fromId);
-
-      return Response.json({
-        ok: true,
-        autoDeclined: true,
+      // Only send decline if requester is still alive.
+      const initiator = await prisma.presence.findUnique({
+        where: {
+          id: fromId,
+        },
+        select: {
+          lastSeen: true,
+        },
       });
+
+      if (initiator && Date.now() - initiator.lastSeen.getTime() <= STALE_MS) {
+        await sendDecline(toId, fromId);
+      }
+
+      return Response.json({ ok: true, autoDecline: true });
     }
   }
 
@@ -113,21 +160,24 @@ export async function POST(request: NextRequest) {
       },
     });
   }
+
   await prisma.signal.create({
     data: { fromId, toId, type: signalType, payload: payloadStr },
   });
 
-  return Response.json({ ok: true });
-}
-
-// Helper: deliver an auto-decline from `target` back to `initiator`.
-async function sendDecline(targetId: string, initiatorId: string) {
-  await prisma.signal.create({
-    data: {
-      fromId: targetId,
-      toId: initiatorId,
-      type: "decline",
-      payload: null,
-    },
+  return Response.json({
+    ok: true,
   });
+  
+  // Helper: deliver an auto-decline from `target` back to `initiator`.
+  async function sendDecline(targetId: string, initiatorId: string) {
+    await prisma.signal.create({
+      data: {
+        fromId: targetId,
+        toId: initiatorId,
+        type: "decline",
+        payload: null,
+      },
+    });
+  }
 }

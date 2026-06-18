@@ -490,3 +490,95 @@ After the fix:
 User1 → User2 messages
 User2 → User1 messages
 Both peers now have a synchronized RTCDataChannel after connection.
+
+## Fix: Stale WebRTC Connection State After Offline/Rejoin
+
+### Problem
+
+A race condition could leave users stuck in a busy state after a failed WebRTC connection.
+
+Example flow:
+
+1. Phone sends a `request` signal.
+   - Signal is stored in the `signal` table.
+
+2. PC accepts.
+   - PC sends an `accept` signal.
+   - Server marks both users as `busy`.
+
+3. Phone goes offline before WebRTC completes.
+
+4. PC keeps waiting for the connection.
+
+5. Phone disappears from polling because `lastSeen` expires.
+
+6. PC detects the missing peer:
+
+```ts
+const peerStillHere = data.peers.some((p) => p.id === c.peerId);
+
+if (!peerStillHere) {
+  teardown("The stranger went offline.");
+}
+```
+
+The PC destroys its local WebRTC state.
+
+7. Phone reconnects later.
+
+The phone does not know the previous connection failed because:
+
+- the old `accept` signal was already consumed by polling or expired
+- WebRTC negotiation never completed
+- server-side `busy` state remained true
+- the stale presence was not cleared immediately
+
+When the PC sends another request, the phone receives it but rejects it because it still appears busy.
+
+---
+
+### Root Cause
+
+The server trusted the `busy` flag longer than the actual connection lifetime.
+
+`busy` represented "a connection was accepted", but there was no guarantee that:
+
+- both peers were still online
+- WebRTC was established
+- the connection was still active
+
+A disconnected client could leave stale state behind.
+
+---
+
+### Fix
+
+The server now owns connection cleanup more strictly:
+
+- Sender validation happens before changing busy state.
+- Stale users cannot send signals or change connection state.
+- Request targets must be online (`lastSeen` check) before accepting requests.
+- `leave` removes the presence row completely instead of only marking it stale.
+- `cleanup` removes expired users and clears related signals.
+- Polling only updates heartbeat and reads data; it does not perform cleanup.
+- Signal delivery deletes only valid consumed messages.
+
+Additional protection:
+
+- Auto-decline only happens when the requester is still online.
+- A stale client cannot resurrect an old connection state.
+- Busy state is cleared when users leave or expire.
+
+---
+
+### Result
+
+Failed WebRTC attempts no longer permanently block users.
+
+If a peer disappears:
+
+- local WebRTC state is destroyed
+- server presence expires
+- stale signals are removed
+- busy state is released
+- users can reconnect normally.

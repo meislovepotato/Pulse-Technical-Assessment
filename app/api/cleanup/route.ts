@@ -17,6 +17,56 @@ export async function POST(_request: NextRequest) {
   const staleCutoff = new Date(now - (STALE_MS + 5000));
   const signalCutoff = new Date(now - SIGNAL_TTL_MS);
 
+  // Find stale users first so we can remove their signals.
+  const staleUsers = await prisma.presence.findMany({
+    where: {
+      lastSeen: {
+        lt: staleCutoff,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  const staleIds = staleUsers.map((u) => u.id);
+
+  // Remove mailbox messages involving dead users.
+  let removedSignalsForUsers = 0;
+
+  if (staleIds.length > 0) {
+    const result = await prisma.signal.deleteMany({
+      where: {
+        OR: [
+          {
+            fromId: {
+              in: staleIds,
+            },
+          },
+          {
+            toId: {
+              in: staleIds,
+            },
+          },
+        ],
+      },
+    });
+
+    removedSignalsForUsers = result.count;
+
+    // Release busy flags before removing presence.
+    await prisma.presence.updateMany({
+      where: {
+        id: {
+          in: staleIds,
+        },
+      },
+      data: {
+        busy: false,
+      },
+    });
+  }
+
   const presenceResult = await prisma.presence.deleteMany({
     where: { lastSeen: { lt: staleCutoff } },
   });
@@ -25,17 +75,9 @@ export async function POST(_request: NextRequest) {
     where: { createdAt: { lt: signalCutoff } },
   });
 
-  await prisma.presence.deleteMany({
-    where: { lastSeen: { lt: staleCutoff } },
-  });
-
-  await prisma.signal.deleteMany({
-    where: { createdAt: { lt: signalCutoff } },
-  });
-
   return Response.json({
     ok: true,
     removedPresence: presenceResult.count,
-    removedSignals: signalResult.count,
+    removedSignals: signalResult.count + removedSignalsForUsers,
   });
 }
