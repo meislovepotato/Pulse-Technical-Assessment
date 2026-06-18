@@ -53,8 +53,8 @@ export default function Home() {
   const peerRef = useRef<PeerSession | null>(null);
   const msgId = useRef(0);
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const noticeTimer = useRef<number| null>(null);
-  
+  const noticeTimer = useRef<number | null>(null);
+
   function showNotice(text: string) {
     setNotice(text);
 
@@ -228,7 +228,27 @@ export default function Home() {
   function processSignal(sig: SignalMsg) {
     switch (sig.type) {
       case "request": {
-        if (connRef.current.kind === "idle") {
+        const c = connRef.current;
+
+        // deterministic tie-breaker
+        const selfWins = sessionId > sig.fromId; // or use lexicographic rule
+
+        if (c.kind === "requesting" && c.peerId === sig.fromId) {
+          if (selfWins) {
+            // we win → treat as accept instead of decline
+            startPeer(sig.fromId, true);
+            void sendSignal(sessionId, sig.fromId, "accept");
+            setConn({ kind: "connecting", peerId: sig.fromId });
+          } else {
+            // we lose → accept theirs
+            void sendSignal(sessionId, sig.fromId, "accept");
+            startPeer(sig.fromId, false);
+            setConn({ kind: "connecting", peerId: sig.fromId });
+          }
+          break;
+        }
+
+        if (c.kind === "idle") {
           setConn({ kind: "incoming", peerId: sig.fromId });
         } else {
           void sendSignal(sessionId, sig.fromId, "decline");

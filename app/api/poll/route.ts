@@ -24,13 +24,12 @@ export async function GET(request: NextRequest) {
   }
 
   const now = Date.now();
-  const heartbeatTime = new Date(now);
   const staleCutoff = new Date(now - STALE_MS);
 
   // 1) Heartbeat — refresh lastSeen for the caller.
   await prisma.presence.updateMany({
-    where: { id },
-    data: { lastSeen: heartbeatTime },
+    where: { lastSeen: { lt: staleCutoff }, busy: true },
+    data: { busy: false },
   });
 
   // NOTE: Cleanup must NOT run inside poll — server-owned only. See
@@ -42,7 +41,7 @@ export async function GET(request: NextRequest) {
       id: { not: id },
       lastSeen: { gte: staleCutoff },
     },
-    select: { id: true, lat: true, lng: true, busy: true },
+    select: { id: true, lat: true, lng: true, busy: true, lastSeen: true },
   });
 
   /*
@@ -67,17 +66,27 @@ export async function GET(request: NextRequest) {
       const ids = msgs.map((m) => m.id);
       await tx.signal.deleteMany({ where: { id: { in: ids } } });
     }
-    return msgs;
+    const validSignals = msgs.filter((s) => {
+      const age = Date.now() - new Date(s.createdAt).getTime();
+      return age < STALE_MS * 2; // safety window
+    });
+    return validSignals;
   });
 
   // 4. Read this user's mailbox (no deletion in poll)
-  const response: PollResponse = {
-    peers: peers.map((p) => ({
+  const peersWithStatus = peers.map((p) => {
+    const isStale = Date.now() - new Date(p.lastSeen).getTime() > STALE_MS;
+
+    return {
       id: p.id,
       lat: p.lat,
       lng: p.lng,
       busy: p.busy,
-    })),
+      stale: isStale,
+    };
+  });
+  const response: PollResponse = {
+    peers: peersWithStatus,
     signals: inbox.map((s) => ({
       id: s.id,
       fromId: s.fromId,
