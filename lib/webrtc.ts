@@ -61,27 +61,51 @@ export class PeerSession {
     };
 
     if (initiator) {
-      this.dc = this.pc.createDataChannel("chat");
-      this.wireDataChannel(this.dc);
+      const channel = this.pc.createDataChannel("chat");
+      this.dc = channel;
+      this.wireDataChannel(channel);
     } else {
       this.pc.ondatachannel = (e) => {
+        if (this.dc) {
+          return;
+        }
+
         this.dc = e.channel;
-        this.wireDataChannel(this.dc);
+        this.wireDataChannel(e.channel);
       };
     }
   }
 
   private wireDataChannel(dc: RTCDataChannel) {
-    dc.onopen = () => this.cb.onChannelOpen();
+    dc.onopen = () => {
+      console.log("data channel open");
+      this.cb.onChannelOpen();
+    };
+
+    dc.onclose = () => {
+      console.log("data channel closed");
+    };
+
+    dc.onerror = (err) => {
+      console.error("data channel error", err);
+    };
+
     dc.onmessage = (e) => {
+      console.log("received:", e.data);
+
       try {
         const msg = JSON.parse(e.data as string);
+
         if (msg.t === "chat" && typeof msg.text === "string") {
           this.cb.onChat(msg.text);
-        } else if (msg.t === "ctrl" && typeof msg.ctrl === "string") {
+        }
+
+        if (msg.t === "ctrl" && typeof msg.ctrl === "string") {
           this.cb.onControl(msg.ctrl as PeerControl);
         }
-      } catch {}
+      } catch (err) {
+        console.error("bad data channel message", err);
+      }
     };
   }
 
@@ -107,8 +131,8 @@ export class PeerSession {
     this.ignoreOffer = !this.polite && offerCollision;
     if (this.ignoreOffer) return;
 
-    await this.flushPendingCandidates();
     await this.pc.setRemoteDescription(desc);
+    await this.flushPendingCandidates();
     if (desc.type === "offer") {
       await this.pc.setLocalDescription();
       if (this.pc.localDescription) {
@@ -129,7 +153,17 @@ export class PeerSession {
   }
 
   sendChat(text: string) {
-    this.safeSend({ t: "chat", text });
+    if (!this.dc || this.dc.readyState !== "open") {
+      console.warn("chat unavailable", this.dc?.readyState);
+      return;
+    }
+
+    this.dc.send(
+      JSON.stringify({
+        t: "chat",
+        text,
+      }),
+    );
   }
 
   sendControl(ctrl: PeerControl) {
