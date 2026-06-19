@@ -713,3 +713,61 @@ local stream.
 - `npx tsc --noEmit` — clean.
 - `npx eslint app/` — clean.
 - `npx next build` — compiled successfully (8.9s, Turbopack).
+
+## Phase 2 — UI Polish (Tier 3)
+
+UI-only follow-up: map controls, empty-state treatment, typography.
+
+### 1. Map recenter + first-load fit-bounds (`app/components/WorldMap.tsx`)
+
+- New `pulse-recenter` button (crosshair icon) stacked above the leave button
+  in the bottom-right corner. Hover tints to emerald, active scales down;
+  the icon spins while a `flyTo` is in flight.
+- `handleRecenter` calls `map.flyTo({ center: [me.lng, me.lat], zoom: 4, duration: 1500 })`.
+- New effect performs a one-time `fitBounds` (padding 80, 1.4s, max zoom 5.5)
+  over `me` + all current peers when the map first becomes ready with at
+  least one peer. Uses a `hasFitInitialRef` so it never re-runs.
+- `disabled` when `me` is null so the button is never a no-op.
+
+### 2. Empty-state panel (`app/page.tsx`)
+
+- New `pulse-empty` glass card centered on the map, shown when
+  `peers.length === 0` and the user is `phase === "live"`.
+- 1.5s show delay (so polling flicker doesn't flash it), 400ms fade-out
+  when peers appear (`pulse-empty-leaving`).
+- Animated concentric pulse + dot, "Looking for people nearby…" headline,
+  one-line subcopy.
+- Implemented with two pieces of state (`emptyVisible`, `emptyLeaving`) all
+  updated from `setTimeout` callbacks inside a single effect — no synchronous
+  setState in effects, passes `react-hooks/set-state-in-effect`.
+
+### 3. Typography refinements
+
+- New utility classes in `globals.css`:
+  - `.pulse-display` — `font-feature-settings: "ss01", "cv11", "ss03";` and
+    tighter letter-spacing for large display text.
+  - `.pulse-numeric` — `font-variant-numeric: tabular-nums` for the online
+    count and any number that changes in real time.
+  - `.pulse-mono` — Geist Mono with a robust fallback stack for technical
+    text (region code, etc.).
+  - `.pulse-eyebrow` — small-caps style for labels.
+- Applied in `WorldMap` HUD (count + region), `EntryGate` wordmark
+  (`pulse-display`).
+- Follow-up (same Tier 3 branch) — extended the refinements to the
+  surfaces that actually carry weight in the UI:
+  - `ConnectionPrompt` h2 gets `pulse-display`.
+  - `pulse-chat-name` rule tightened (`letter-spacing: -0.012em`) with
+    `font-feature-settings`.
+  - `pulse-empty-title` rule tightened (`letter-spacing: -0.018em`) with
+    `font-feature-settings`.
+  - `pulse-video-name` flipped from positive tracking (`0.02em`) to
+    display-negative (`-0.01em`) with font features — was the only
+    typography outlier.
+  - `pulse-toast` rule gets a subtle `-0.005em` tracking + font features
+    so the message text feels of-a-piece with the rest.
+
+### Verification
+
+- `npx tsc --noEmit` — clean.
+- `npx eslint app/` — clean.
+- `npx next build` — compiled successfully (8.0s, Turbopack).

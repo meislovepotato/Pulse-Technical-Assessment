@@ -86,9 +86,9 @@ export class PeerSession {
       console.log("data channel closed");
     };
 
-    dc.onerror = (err) => {
-      console.error("data channel error", err);
-    };
+    // dc.onerror = (err) => {
+    //   console.error("data channel error", err);
+    // };
 
     dc.onmessage = (e) => {
       console.log("received:", e.data);

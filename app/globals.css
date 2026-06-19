@@ -597,6 +597,8 @@ body {
   color: var(--text-primary);
   font-size: 0.85rem;
   font-weight: 500;
+  letter-spacing: -0.005em;
+  font-feature-settings: "ss01", "cv11";
   overflow: hidden;
   animation: toast-in 0.32s var(--ease-out) forwards;
 }
@@ -858,8 +860,8 @@ body {
 .pulse-status {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px 10px 14px;
+  gap: 10px;
+  padding: 8px 12px 8px 14px;
   border-radius: var(--r-pill);
   background: var(--bg-glass-strong);
   backdrop-filter: blur(20px) saturate(160%);
@@ -907,22 +909,31 @@ body {
 }
 
 .pulse-status-cancel {
-  margin-left: 4px;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+  padding: 0;
+  border-radius: 9999px;
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  font-size: 0.75rem;
-  font-weight: 500;
   cursor: pointer;
-  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, transform 0.15s var(--ease-out);
+  flex-shrink: 0;
 }
 
 .pulse-status-cancel:hover {
   color: var(--text-primary);
   border-color: var(--border-strong);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.06);
+}
+
+.pulse-status-cancel:active {
+  transform: scale(0.92);
 }
 
 /* ============================================================
@@ -1001,7 +1012,8 @@ body {
 .pulse-chat-name {
   font-weight: 600;
   font-size: 0.92rem;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.012em;
+  font-feature-settings: "ss01", "cv11";
 }
 
 .pulse-chat-status {
@@ -1264,7 +1276,8 @@ body {
   color: var(--text-primary);
   font-size: 0.78rem;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
+  font-feature-settings: "ss01", "cv11";
   z-index: 1;
   opacity: 0.85;
   transition: opacity 0.2s ease;
@@ -1374,6 +1387,180 @@ body {
 }
 
 /* ============================================================
+   Map controls — recenter button (above the leave button)
+   ============================================================ */
+.pulse-recenter {
+  position: absolute;
+  bottom: 70px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  z-index: 10;
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s var(--ease-out), background-color 0.2s ease;
+  box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.6);
+  animation: hud-in 0.6s var(--ease-out) 0.6s both;
+}
+
+.pulse-recenter:hover {
+  color: var(--accent-from);
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+  transform: scale(1.05);
+}
+
+.pulse-recenter:active {
+  transform: scale(0.92);
+}
+
+.pulse-recenter:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.35);
+}
+
+.pulse-recenter[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Subtle "recentering" pulse on the icon while a flyTo is in flight */
+.pulse-recenter-flying svg {
+  animation: recenter-spin 1.2s var(--ease-in-out) infinite;
+}
+
+@keyframes recenter-spin {
+  0%   { transform: rotate(0deg);   }
+  100% { transform: rotate(360deg); }
+}
+
+/* ============================================================
+   Empty-state panel (zero peers)
+   ============================================================ */
+.pulse-empty {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, calc(-50% + 60px)); /* sits above the HUD */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 24px 20px;
+  border-radius: var(--r-lg);
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 320px;
+  z-index: 5;
+  pointer-events: none;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+  animation: empty-in 0.6s var(--ease-out) 0.3s both;
+}
+
+.pulse-empty-leaving {
+  animation: empty-out 0.35s var(--ease-out) forwards;
+}
+
+.pulse-empty-pulse {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse-empty-pulse::before,
+.pulse-empty-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid var(--accent-from);
+  animation: pulse-ring 2.2s var(--ease-out) infinite;
+  opacity: 0;
+}
+
+.pulse-empty-pulse::after {
+  animation-delay: 1.1s;
+}
+
+.pulse-empty-pulse-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  box-shadow: 0 0 16px var(--accent-glow);
+  position: relative;
+  z-index: 1;
+}
+
+.pulse-empty-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  font-feature-settings: "ss01", "cv11";
+}
+
+.pulse-empty-sub {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: 260px;
+}
+
+@keyframes empty-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 70px)); }
+  to   { opacity: 1; transform: translate(-50%, calc(-50% + 60px)); }
+}
+
+@keyframes empty-out {
+  from { opacity: 1; transform: translate(-50%, calc(-50% + 60px)); }
+  to   { opacity: 0; transform: translate(-50%, calc(-50% + 50px)); }
+}
+
+/* ============================================================
+   Typography utilities
+   ============================================================ */
+.pulse-display {
+  font-feature-settings: "ss01", "cv11", "ss03";
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.pulse-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "ss01";
+}
+
+.pulse-mono {
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: "ss01", "cv11";
+}
+
+.pulse-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* ============================================================
    Reduced motion
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
@@ -1388,5 +1575,12 @@ body {
   }
   .pulse-grid {
     display: none;
+  }
+  .pulse-empty {
+    animation: none;
+    opacity: 1;
+  }
+  .pulse-recenter svg {
+    animation: none !important;
   }
 }

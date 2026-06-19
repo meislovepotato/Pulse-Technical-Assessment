@@ -24,7 +24,7 @@ export default function ConnectionPrompt({
           <span className="pulse-prompt-ring-dot" />
         </div>
 
-        <h2 className="text-lg font-semibold tracking-tight text-zinc-50">
+        <h2 className="pulse-display text-lg font-semibold tracking-tight text-zinc-50">
           {title}
         </h2>
         {subtitle && (

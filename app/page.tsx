@@ -57,6 +57,8 @@ export default function Home() {
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<number | null>(null);
   const [notice, setNotice] = useState<{ message: string; variant: ToastVariant } | null>(null);
+  const [emptyVisible, setEmptyVisible] = useState(false);
+  const [emptyLeaving, setEmptyLeaving] = useState(false);
 
   const showNotice = useCallback(
     (text: string, variant: ToastVariant = "info") => {
@@ -424,6 +426,35 @@ export default function Home() {
     };
   }, [sessionId, phase]);
 
+  // Empty-state panel: shown when no peers are online (and we're connected),
+  // with a short delay so polling flicker doesn't trigger it, and a leaving
+  // animation when peers finally appear.
+  useEffect(() => {
+    if (phase !== "live") return;
+    const timers: number[] = [];
+
+    if (peers.length > 0) {
+      // Begin the leaving animation, then unmount after the leave duration.
+      timers.push(window.setTimeout(() => {
+        setEmptyLeaving(true);
+        timers.push(window.setTimeout(() => {
+          setEmptyVisible(false);
+          setEmptyLeaving(false);
+        }, 400));
+      }, 0));
+    } else {
+      // Show after a short delay so transient zero-peer ticks don't flash it.
+      timers.push(window.setTimeout(() => {
+        setEmptyVisible(true);
+        setEmptyLeaving(false);
+      }, 1500));
+    }
+
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+    };
+  }, [peers.length, phase]);
+
   async function handleReady(lat: number, lng: number) {
     setMyLocation({ lat, lng });
     await join(sessionId, lat, lng);
@@ -456,6 +487,24 @@ export default function Home() {
       />
 
       {notice && <Toast message={notice.message} variant={notice.variant} />}
+
+      {emptyVisible && (
+        <div
+          className={`pulse-empty ${emptyLeaving ? "pulse-empty-leaving" : ""}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span className="pulse-empty-pulse" aria-hidden="true">
+            <span className="pulse-empty-pulse-dot" />
+          </span>
+          <div>
+            <p className="pulse-empty-title">Looking for people nearby…</p>
+            <p className="pulse-empty-sub">
+              You&rsquo;re live. New dots appear here the moment someone joins.
+            </p>
+          </div>
+        </div>
+      )}
 
       {conn.kind === "requesting" && (
         <StatusPill

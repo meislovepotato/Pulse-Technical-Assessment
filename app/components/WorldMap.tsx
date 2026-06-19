@@ -18,6 +18,25 @@ function dotColor(id: string): string {
   return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
 }
 
+function CrosshairIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+    </svg>
+  );
+}
+
 export default function WorldMap({
   peers,
   me,
@@ -38,6 +57,10 @@ export default function WorldMap({
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
+  // True while a recenter flyTo is in flight (drives the spin animation).
+  const [flying, setFlying] = useState(false);
+  // Whether the first-load fit-bounds has been performed — only once.
+  const hasFitInitialRef = useRef(false);
   // Derive region once on mount from the browser locale — no reactivity needed.
   const [region] = useState<string | null>(() => {
     if (typeof navigator === "undefined") return null;
@@ -192,6 +215,59 @@ export default function WorldMap({
     onLeave();
   }
 
+  // Recenter the map onto the user's own location with a smooth flyTo.
+  function handleRecenter() {
+    const map = mapRef.current;
+    if (!map || !me) return;
+    setFlying(true);
+    map.flyTo({
+      center: [me.lng, me.lat],
+      zoom: 4,
+      pitch: 0,
+      bearing: 0,
+      duration: 1500,
+      essential: true,
+    });
+    // Clear the spin a tick after the fly should be done — Mapbox doesn't
+    // expose a "flyEnd" callback on the basic API without subscribing to
+    // `moveend`, and 1500ms matches the requested duration exactly.
+    window.setTimeout(() => setFlying(false), 1500);
+  }
+
+  // First-load fit-bounds: once the map is ready, peers exist, and we know
+  // where the user is, gently fit the camera to include them all.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !me) return;
+    if (hasFitInitialRef.current) return;
+    if (peers.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const mapboxgl = (await import("mapbox-gl")).default;
+      if (cancelled) return;
+      const bounds = new mapboxgl.LngLatBounds(
+        [me.lng, me.lat],
+        [me.lng, me.lat],
+      );
+      for (const p of peers) bounds.extend([p.lng, p.lat]);
+
+      // Skip the animation if the user already moved the map themselves.
+      if (hasFitInitialRef.current) return;
+      hasFitInitialRef.current = true;
+      map.fitBounds(bounds, {
+        padding: 80,
+        duration: 1400,
+        maxZoom: 5.5,
+        essential: true,
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, peers, me]);
+
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full bg-zinc-900" />
@@ -219,15 +295,27 @@ export default function WorldMap({
       {/* Online HUD */}
       <div className="pulse-hud" aria-label="Live presence status">
         <span className="pulse-hud-dot" aria-hidden="true" />
-        <span className="pulse-hud-count">{peers.length}</span>
+        <span className="pulse-hud-count pulse-numeric">{peers.length}</span>
         <span className="text-zinc-400">online</span>
         {region && (
           <>
             <span className="pulse-hud-divider" aria-hidden="true" />
-            <span className="pulse-hud-region">{region}</span>
+            <span className="pulse-hud-region pulse-mono">{region}</span>
           </>
         )}
       </div>
+
+      {/* Recenter button (above the leave button) */}
+      <button
+        type="button"
+        onClick={handleRecenter}
+        disabled={!me}
+        className={`pulse-recenter ${flying ? "pulse-recenter-flying" : ""}`}
+        title="Recenter on me"
+        aria-label="Recenter on me"
+      >
+        <CrosshairIcon />
+      </button>
 
       {/* Leave / disconnect button */}
       <button
