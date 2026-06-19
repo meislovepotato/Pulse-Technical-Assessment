@@ -6,6 +6,7 @@ import WorldMap from "./components/WorldMap";
 import ConnectionPrompt from "./components/ConnectionPrompt";
 import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
+import Toast, { type ToastVariant } from "./components/Toast";
 import { join, leave, poll, sendSignal } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
 import { POLL_INTERVAL_MS } from "@/lib/presence";
@@ -28,7 +29,6 @@ export default function Home() {
   const [sessionId] = useState(() => crypto.randomUUID());
   const [peers, setPeers] = useState<PeerDot[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [myLocation, setMyLocation] = useState<{
@@ -55,25 +55,29 @@ export default function Home() {
   const msgId = useRef(0);
   const requestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeTimer = useRef<number | null>(null);
+  const [notice, setNotice] = useState<{ message: string; variant: ToastVariant } | null>(null);
 
-  const showNotice = useCallback((text: string) => {
-    setNotice(text);
+  const showNotice = useCallback(
+    (text: string, variant: ToastVariant = "info") => {
+      setNotice({ message: text, variant });
 
-    if (noticeTimer.current !== null) {
-      clearTimeout(noticeTimer.current);
-    }
+      if (noticeTimer.current !== null) {
+        clearTimeout(noticeTimer.current);
+      }
 
-    noticeTimer.current = window.setTimeout(() => {
-      setNotice(null);
-    }, 3500);
-  }, []);
+      noticeTimer.current = window.setTimeout(() => {
+        setNotice(null);
+      }, 3500);
+    },
+    [],
+  );
 
   function addMessage(mine: boolean, text: string) {
     setMessages((prev) => [...prev, { id: msgId.current++, mine, text }]);
   }
 
   const teardown = useCallback(
-    (message?: string) => {
+    (message?: string, variant: ToastVariant = "warn") => {
       if (requestTimer.current) {
         clearTimeout(requestTimer.current);
         requestTimer.current = null;
@@ -85,7 +89,7 @@ export default function Home() {
       setVideo("none");
       setMessages([]);
       setConn({ kind: "idle" });
-      if (message) showNotice(message);
+      if (message) showNotice(message, variant);
     },
     [showNotice],
   );
@@ -100,7 +104,7 @@ export default function Home() {
       onRemoteStream: (stream) => setRemoteStream(stream),
       onConnectionState: (state) => {
         if (state === "failed") {
-          teardown("Connection failed (network).");
+          teardown("Connection failed (network).", "error");
         }
       },
       onChannelOpen: () => {
@@ -137,14 +141,14 @@ export default function Home() {
             .catch(() => {
               setVideo("none");
               ps.sendControl("video-end");
-              showNotice("Camera unavailable.");
+              showNotice("Camera unavailable.", "error");
             });
         }
         break;
       case "video-decline":
         if (videoRef.current === "requesting") {
           setVideo("none");
-          showNotice("Video declined.");
+          showNotice("Video declined.", "warn");
         }
         break;
       case "video-end":
@@ -222,7 +226,7 @@ export default function Home() {
       .catch(() => {
         ps.sendControl("video-decline");
         setVideo("none");
-        showNotice("Camera unavailable.");
+        showNotice("Camera unavailable.", "error");
       });
   }
 
@@ -368,13 +372,13 @@ export default function Home() {
           if (!peerStillHere) {
             if (c.kind === "incoming") {
               setConn({ kind: "idle" });
-              showNotice("The stranger went offline.");
+              showNotice("The stranger went offline.", "warn");
             } else {
               if (requestTimer.current) {
                 clearTimeout(requestTimer.current);
                 requestTimer.current = null;
               }
-              teardown("The stranger went offline.");
+              teardown("The stranger went offline.", "warn");
             }
             // skip processing signals this tick
             if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
@@ -395,7 +399,7 @@ export default function Home() {
           c.kind === "incoming" ||
           c.kind === "connecting"
         ) {
-          teardown("Connection lost.");
+          teardown("Connection lost.", "error");
         }
       }
       if (active) timer = setTimeout(tick, POLL_INTERVAL_MS);
@@ -425,6 +429,14 @@ export default function Home() {
     setPhase("live");
   }
 
+  function handleLeave() {
+    if (sessionId) leave(sessionId);
+    teardown();
+    setPeers([]);
+    setMyLocation(null);
+    setPhase("gate");
+  }
+
   if (phase === "gate") {
     return <EntryGate onReady={handleReady} />;
   }
@@ -438,13 +450,11 @@ export default function Home() {
         me={myLocation}
         onPeerClick={requestConnection}
         canConnect={conn.kind === "idle"}
+        onLeave={handleLeave}
+        sessionId={sessionId}
       />
 
-      {notice && (
-        <div className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
-          {notice}
-        </div>
-      )}
+      {notice && <Toast message={notice.message} variant={notice.variant} />}
 
       {conn.kind === "requesting" && (
         <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">

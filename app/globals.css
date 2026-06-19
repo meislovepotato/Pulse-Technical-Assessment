@@ -1,79 +1,701 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Design tokens
+   ============================================================ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-base: #07090c;
+  --bg-elevated: #0e1116;
+  --bg-overlay: #11141b;
+  --bg-glass: rgba(14, 17, 22, 0.55);
+  --bg-glass-strong: rgba(14, 17, 22, 0.78);
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+
+  --accent-from: #34d399;
+  --accent-to: #22d3ee;
+  --accent-glow: rgba(52, 211, 153, 0.45);
+  --accent-soft: rgba(52, 211, 153, 0.12);
+
+  --danger: #f87171;
+  --warning: #fbbf24;
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 9999px;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-base);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-base: #0a0a0c;
+    --bg-elevated: #111114;
+    --bg-overlay: #161619;
+    --bg-glass: rgba(17, 17, 20, 0.6);
+    --bg-glass-strong: rgba(17, 17, 20, 0.82);
+    --text-primary: #fafafa;
+    --text-secondary: #d4d4d8;
+    --text-muted: #a1a1aa;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+html, body {
+  height: 100%;
 }
 
-/* Live user dots on the map */
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   Cinematic EntryGate — ambient mesh + subtle grid
+   ============================================================ */
+.pulse-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.pulse-ambient::before,
+.pulse-ambient::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.55;
+  will-change: transform;
+}
+
+.pulse-ambient::before {
+  width: 60vmin;
+  height: 60vmin;
+  left: -10vmin;
+  top: -10vmin;
+  background: radial-gradient(circle, var(--accent-from) 0%, transparent 70%);
+  animation: ambient-drift-a 18s var(--ease-in-out) infinite;
+}
+
+.pulse-ambient::after {
+  width: 70vmin;
+  height: 70vmin;
+  right: -15vmin;
+  bottom: -15vmin;
+  background: radial-gradient(circle, var(--accent-to) 0%, transparent 70%);
+  animation: ambient-drift-b 22s var(--ease-in-out) infinite;
+}
+
+.pulse-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 80%);
+  opacity: 0.5;
+  z-index: 0;
+  pointer-events: none;
+}
+
+@keyframes ambient-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(20vmin, 15vmin) scale(1.15); }
+}
+
+@keyframes ambient-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50%      { transform: translate(-25vmin, -20vmin) scale(1.2); }
+}
+
+/* ============================================================
+   Wordmark + entrance animations
+   ============================================================ */
+.pulse-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--text-primary);
+  text-shadow: 0 0 40px rgba(52, 211, 153, 0.18);
+}
+
+.pulse-wordmark-icon {
+  width: 1em;
+  height: 1em;
+  color: var(--accent-from);
+  filter: drop-shadow(0 0 12px var(--accent-glow));
+  animation: heartbeat 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes heartbeat {
+  0%, 100% { transform: scale(1); }
+  20%      { transform: scale(1.18); }
+  40%      { transform: scale(1); }
+  60%      { transform: scale(1.08); }
+  80%      { transform: scale(1); }
+}
+
+.pulse-rise {
+  opacity: 0;
+  transform: translateY(12px);
+  animation: rise 0.8s var(--ease-out) forwards;
+}
+
+.pulse-rise-1 { animation-delay: 0.05s; }
+.pulse-rise-2 { animation-delay: 0.2s; }
+.pulse-rise-3 { animation-delay: 0.35s; }
+.pulse-rise-4 { animation-delay: 0.5s; }
+.pulse-rise-5 { animation-delay: 0.65s; }
+
+@keyframes rise {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Primary gradient button (with glow)
+   ============================================================ */
+.pulse-btn-primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 36px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  color: #052e1c;
+  background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+  border-radius: var(--r-pill);
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s var(--ease-out), box-shadow 0.3s var(--ease-out), filter 0.2s ease;
+  box-shadow:
+    0 0 0 0 var(--accent-glow),
+    0 10px 30px -10px rgba(34, 211, 238, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  overflow: hidden;
+}
+
+.pulse-btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.35) 50%, transparent 100%);
+  transform: translateX(-100%);
+  transition: transform 0.6s var(--ease-out);
+  pointer-events: none;
+}
+
+.pulse-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 30px 0 var(--accent-glow),
+    0 14px 40px -10px rgba(34, 211, 238, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.pulse-btn-primary:hover:not(:disabled)::before {
+  transform: translateX(100%);
+}
+
+.pulse-btn-primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.pulse-btn-primary:disabled {
+  opacity: 0.7;
+  cursor: progress;
+  filter: saturate(0.8);
+}
+
+/* Locating progress bar under the button */
+.pulse-progress {
+  position: relative;
+  height: 2px;
+  width: 180px;
+  border-radius: var(--r-pill);
+  background: var(--border-subtle);
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+.pulse-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent-from), var(--accent-to), transparent);
+  border-radius: var(--r-pill);
+  animation: progress-slide 1.4s var(--ease-in-out) infinite;
+}
+
+@keyframes progress-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* Error card slide-in */
+.pulse-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #fecaca;
+  font-size: 0.85rem;
+  animation: rise 0.4s var(--ease-out) forwards;
+}
+
+.pulse-error::before {
+  content: "!";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #450a0a;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* ============================================================
+   Glass utility
+   ============================================================ */
+.pulse-glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+}
+
+.pulse-glass-strong {
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-strong);
+}
+
+/* ============================================================
+   Map dot — layered pulse
+   ============================================================ */
 .pulse-dot {
-  width: 14px;
-  height: 14px;
+  position: relative;
+  width: 16px;
+  height: 16px;
   border-radius: 9999px;
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.92);
   cursor: pointer;
   padding: 0;
+  background: transparent;
   box-shadow: 0 0 0 rgba(255, 255, 255, 0.5);
-  animation: pulse-ring 2s ease-out infinite;
-  transition: transform 0.1s ease;
+  transition: transform 0.18s var(--ease-out), box-shadow 0.3s ease;
+  outline: none;
+}
+
+.pulse-dot::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  background: inherit;
+  box-shadow: 0 0 12px 1px currentColor;
+  opacity: 0.7;
+  z-index: -1;
+}
+
+.pulse-dot::after {
+  content: "";
+  position: absolute;
+  inset: 50% 50% 50% 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.55);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .pulse-dot:hover {
-  transform: scale(1.3);
+  transform: scale(1.35);
+  box-shadow: 0 0 24px 2px rgba(255, 255, 255, 0.25);
 }
 
-/* The user's own "you are here" pin — small, sized like the dots. */
+.pulse-dot:active {
+  transform: scale(1.15);
+}
+
+.pulse-dot:focus-visible {
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.6);
+}
+
+.pulse-dot-busy {
+  filter: grayscale(0.5) brightness(0.7);
+  animation: none !important;
+}
+
+.pulse-dot-busy::after {
+  display: none;
+}
+
+/* Two staggered ring animations layered together */
+.pulse-dot::before,
+.pulse-dot::after {
+  /* The ::after is the inner core highlight — keep it static-ish */
+}
+
+/* Use wrapper rings around the dot for the two staggered pulses. */
+.pulse-dot-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse-dot-ring {
+  position: absolute;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: pulse-ring 2.4s var(--ease-out) infinite;
+  opacity: 0;
+}
+
+.pulse-dot-ring-2 {
+  animation-delay: 1.2s;
+}
+
+@keyframes pulse-ring {
+  0%   { width: 16px;  height: 16px;  opacity: 0.55; }
+  80%  { width: 56px;  height: 56px;  opacity: 0;    }
+  100% { width: 56px;  height: 56px;  opacity: 0;    }
+}
+
+/* ============================================================
+   "You are here" pin
+   ============================================================ */
 .pulse-me {
   position: relative;
-  font-size: 18px;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
   cursor: default;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6));
+}
+
+.pulse-me-core {
+  position: absolute;
+  inset: 4px;
+  border-radius: 9999px;
+  background: var(--accent-from);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.95),
+    0 0 16px 2px var(--accent-glow);
+  animation: me-pulse 2.2s var(--ease-in-out) infinite;
+}
+
+.pulse-me-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1.5px solid var(--accent-from);
+  opacity: 0.6;
+  animation: me-ring 2.2s var(--ease-out) infinite;
 }
 
 .pulse-me-label {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 6px);
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 1px;
   font-size: 10px;
   font-weight: 700;
-  color: #ffffff;
-  background: rgba(0, 0, 0, 0.6);
-  padding: 0 5px;
-  border-radius: 9999px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-subtle);
   white-space: nowrap;
+  pointer-events: none;
+  animation: me-label-in 0.6s var(--ease-out) 0.3s both;
 }
 
-@keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
+@keyframes me-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 16px 2px var(--accent-glow); }
+  50%      { box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 28px 4px var(--accent-glow); }
+}
+
+@keyframes me-ring {
+  0%   { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(2.6); opacity: 0;   }
+}
+
+@keyframes me-label-in {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to   { opacity: 1; transform: translate(-50%, 0);   }
+}
+
+/* ============================================================
+   HUD — online pill + leave button
+   ============================================================ */
+.pulse-hud {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 12px;
+  border-radius: var(--r-pill);
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  z-index: 10;
+  box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.6);
+  animation: hud-in 0.6s var(--ease-out) 0.4s both;
+}
+
+.pulse-hud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--accent-from);
+  box-shadow: 0 0 10px var(--accent-glow);
+  position: relative;
+}
+
+.pulse-hud-dot::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 9999px;
+  border: 1.5px solid var(--accent-from);
+  animation: pulse-ring 2s var(--ease-out) infinite;
+  opacity: 0;
+}
+
+.pulse-hud-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.pulse-hud-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--border-strong);
+}
+
+.pulse-hud-region {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pulse-hud-leave {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  z-index: 10;
+  transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s var(--ease-out);
+  box-shadow: 0 6px 24px -8px rgba(0, 0, 0, 0.6);
+  animation: hud-in 0.6s var(--ease-out) 0.5s both;
+}
+
+.pulse-hud-leave:hover {
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.4);
+  transform: scale(1.05);
+}
+
+.pulse-hud-leave:active {
+  transform: scale(0.95);
+}
+
+@keyframes hud-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* ============================================================
+   Connection arc — animated dashed line on the map
+   ============================================================ */
+@keyframes arc-dash {
+  to { stroke-dashoffset: -60; }
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.pulse-toast {
+  position: absolute;
+  left: 50%;
+  top: 80px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: inline-flex;
+  flex-direction: column;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 12px 16px 0;
+  border-radius: var(--r-md);
+  background: var(--bg-glass-strong);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 50px -12px rgba(0, 0, 0, 0.7);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  overflow: hidden;
+  animation: toast-in 0.32s var(--ease-out) forwards;
+}
+
+.pulse-toast-leaving {
+  animation: toast-out 0.22s var(--ease-out) forwards;
+}
+
+.pulse-toast-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pulse-toast-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.pulse-toast-info  .pulse-toast-icon { background: var(--accent-from); box-shadow: 0 0 10px var(--accent-glow); }
+.pulse-toast-warn  .pulse-toast-icon { background: var(--warning);        box-shadow: 0 0 10px rgba(251, 191, 36, 0.45); }
+.pulse-toast-error .pulse-toast-icon { background: var(--danger);         box-shadow: 0 0 10px rgba(248, 113, 113, 0.45); }
+
+.pulse-toast-bar {
+  position: relative;
+  height: 2px;
+  width: 100%;
+  margin-top: 10px;
+  background: var(--border-subtle);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.pulse-toast-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  border-radius: var(--r-pill);
+  animation: toast-drain 3.5s linear forwards;
+}
+
+.pulse-toast-info  .pulse-toast-bar::after { background: linear-gradient(90deg, var(--accent-from), var(--accent-to)); }
+.pulse-toast-warn  .pulse-toast-bar::after { background: linear-gradient(90deg, var(--warning), #fb923c); }
+.pulse-toast-error .pulse-toast-bar::after { background: linear-gradient(90deg, var(--danger), #ec4899); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to   { opacity: 1; transform: translate(-50%, 0);    }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translate(-50%, 0);    }
+  to   { opacity: 0; transform: translate(-50%, -8px); }
+}
+
+@keyframes toast-drain {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* ============================================================
+   Modal / status overlays (entrance)
+   ============================================================ */
+@keyframes modal-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes modal-card-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0);   }
+}
+
+.pulse-modal-backdrop {
+  animation: modal-backdrop-in 0.25s var(--ease-out) forwards;
+}
+
+.pulse-modal-card {
+  animation: modal-card-in 0.32s var(--ease-out) forwards;
+}
+
+/* ============================================================
+   Reduced motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
-  70% {
-    box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
+  .pulse-ambient::before,
+  .pulse-ambient::after {
+    animation: none;
   }
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  .pulse-grid {
+    display: none;
   }
 }

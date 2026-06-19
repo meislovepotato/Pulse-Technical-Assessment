@@ -1,5 +1,7 @@
 # Development Notes
 
+# Backend
+
 ## Fix: Prisma `Presence` Table Not Found
 
 ### Issue
@@ -582,3 +584,59 @@ If a peer disappears:
 - stale signals are removed
 - busy state is released
 - users can reconnect normally.
+
+
+# Frontend
+
+## Phase 1 — UI Polish (Tier 1) USING CLAUDE
+
+UI-only changes, no logic touched. Focused on the first impression, the core
+loop (map → chat), and visual consistency.
+
+### 1. Design system + keyframes (`app/globals.css`)
+
+Replaced the minimal theme block with a full token system:
+- Color tokens (`--bg-base`, `--bg-glass`, `--accent-from/to`, `--danger`, `--warning`, borders, radii).
+- Shared easing curves (`--ease-out`, `--ease-in-out`).
+- Keyframes reused across components: `ambient-drift-a/b`, `heartbeat`, `rise`,
+  `progress-slide`, `pulse-ring`, `me-pulse`, `me-ring`, `toast-in/out/drain`,
+  `modal-backdrop-in`, `modal-card-in`, `hud-in`.
+- A `prefers-reduced-motion` block that collapses every animation.
+
+### 2. Cinematic EntryGate (`app/components/EntryGate.tsx`)
+
+- Two slow-drifting blurred radial blobs (CSS-only) + a masked grid layer for depth.
+- Custom SVG pulse-glyph wordmark with a heartbeat animation.
+- Staggered fade-rise on every text/button line.
+- Gradient-glow primary button (emerald → cyan) with a shimmer sweep on hover
+  and an active-press scale.
+- Locating state: spinner inside the button + animated progress bar underneath.
+- Slide-in error card with a leading `!` glyph.
+
+### 3. Toast system (`app/components/Toast.tsx`, new)
+
+Replaced the flat `bg-zinc-800/90` pill with a glass-morphism toast:
+- Three variants — `info` (emerald), `warn` (amber), `error` (red) — color-coded dot + drain bar.
+- Slide-in from top + fade-out 220ms before unmount (synced with the 3.5s dismiss).
+- Bottom drain bar scales 1 → 0 over 3.5s to visualize the auto-dismiss.
+
+### 4. WorldMap upgrade (`app/components/WorldMap.tsx`)
+
+- Dots: layered animation — staggered expanding ring + inner core highlight; busy peers desaturated and static.
+- "You are here" pin: custom CSS dot (glowing core + expanding ring) instead of the generic 📍.
+- Glass HUD (bottom-left): live dot + online count + locale-derived region (e.g. `US`).
+- Leave icon button (bottom-right): calls `leave()` and routes back to the EntryGate.
+- Subtle radial vignette over the map so dots and HUD pop on bright regions.
+
+### 5. `app/page.tsx` wiring
+
+- `notice` state is now `{ message, variant }`; every `showNotice` / `teardown` call site classified (`error` for camera/network failures, `warn` for peer-offline/declined/timeout).
+- `teardown(message, variant?)` defaults to `"warn"`, preserving existing call sites.
+- Inline notice `<div>` replaced with `<Toast … />`.
+- New `handleLeave` callback passed to `WorldMap`: calls `leave()` → `teardown()` → resets local state → `setPhase("gate")`.
+
+### Verification
+
+- `npx tsc --noEmit` — clean.
+- `npx eslint app/` — clean (fixed one `react-hooks/set-state-in-effect` by deriving the region from a `useState` initializer instead of an effect).
+- Mapbox attribution and existing dark-v11 style preserved; map controls unchanged.

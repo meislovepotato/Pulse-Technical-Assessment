@@ -4,8 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { Map as MapboxMap, Marker } from "mapbox-gl";
 import type { PeerDot } from "@/lib/types";
+import { leave } from "@/lib/api";
 
-const TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "pk.eyJ1IjoicHVsc2UtbWFwIiwiYSI6ImNrMDBkZW1vMDAwMDAwMDAifQ.AAAAAAAAAAAAAAAAAAAAAA";
+const TOKEN =
+  process.env.NEXT_PUBLIC_MAPBOX_TOKEN ??
+  "pk.eyJ1IjoicHVsc2UtbWFwIiwiYSI6ImNrMDBkZW1vMDAwMDAwMDAifQ.AAAAAAAAAAAAAAAAAAAAAA";
 
 function dotColor(id: string): string {
   let hash = 0;
@@ -20,17 +23,28 @@ export default function WorldMap({
   me,
   onPeerClick,
   canConnect,
+  onLeave,
+  sessionId,
 }: {
   peers: PeerDot[];
   me: { lat: number; lng: number } | null;
   onPeerClick: (id: string) => void;
   canConnect: boolean;
+  onLeave: () => void;
+  sessionId: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapboxMap | null>(null);
   const markersRef = useRef<Map<string, Marker>>(new Map());
   const meMarkerRef = useRef<Marker | null>(null);
   const [ready, setReady] = useState(false);
+  // Derive region once on mount from the browser locale — no reactivity needed.
+  const [region] = useState<string | null>(() => {
+    if (typeof navigator === "undefined") return null;
+    const regionPart = (navigator.language || "").split("-")[1];
+    if (regionPart && regionPart.length === 2) return regionPart.toUpperCase();
+    return null;
+  });
 
   // Marker click handlers are bound once, so read the live click handler +
   // connectability through refs (synced in an effect, never during render).
@@ -58,6 +72,8 @@ export default function WorldMap({
         center: me ? [me.lng, me.lat] : [0, 20],
         zoom: me ? 4 : 1.4,
         attributionControl: true,
+        pitchWithRotate: false,
+        dragRotate: false,
       });
       map.on("load", () => {
         if (!cancelled) setReady(true);
@@ -92,7 +108,11 @@ export default function WorldMap({
         const el = document.createElement("div");
         el.className = "pulse-me";
         el.title = "You are here";
-        el.innerHTML = `<span class="pulse-me-label">Me</span>📍`;
+        el.innerHTML = `
+          <span class="pulse-me-ring"></span>
+          <span class="pulse-me-core"></span>
+          <span class="pulse-me-label">You</span>
+        `;
         // anchor "bottom" → the pin's tip sits on the exact coordinate.
         meMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: "bottom" })
           .setLngLat([me.lng, me.lat])
@@ -124,9 +144,12 @@ export default function WorldMap({
         let marker = markers.get(peer.id);
         if (!marker) {
           const el = document.createElement("button");
+          el.type = "button";
           el.className = "pulse-dot";
-          el.style.background = dotColor(peer.id);
           el.title = "Tap to connect";
+          el.style.background = dotColor(peer.id);
+          el.style.color = dotColor(peer.id);
+          el.setAttribute("aria-label", "Connect to a stranger");
           el.addEventListener("click", (e) => {
             e.stopPropagation();
             if (canConnectRef.current) onPeerClickRef.current(peer.id);
@@ -135,8 +158,19 @@ export default function WorldMap({
             .setLngLat([peer.lng, peer.lat])
             .addTo(map);
           markers.set(peer.id, marker);
+        } else {
+          marker.setLngLat([peer.lng, peer.lat]);
         }
-        marker.getElement().style.opacity = peer.busy ? "0.35" : "1";
+
+        // Busy peers get a desaturated, static look so the live ones stand out.
+        const el = marker.getElement();
+        if (peer.busy) {
+          el.classList.add("pulse-dot-busy");
+          el.style.opacity = "0.35";
+        } else {
+          el.classList.remove("pulse-dot-busy");
+          el.style.opacity = "1";
+        }
       }
 
       // Drop markers for peers that went offline / got filtered out.
@@ -153,9 +187,24 @@ export default function WorldMap({
     };
   }, [peers, ready]);
 
+  function handleLeave() {
+    if (sessionId) leave(sessionId);
+    onLeave();
+  }
+
   return (
     <div className="absolute inset-0">
       <div ref={containerRef} className="h-full w-full bg-zinc-900" />
+
+      {/* Subtle map vignette so HUD elements and dots pop on bright regions */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%)",
+        }}
+        aria-hidden="true"
+      />
 
       {!TOKEN && (
         <div className="absolute inset-0 flex items-center justify-center p-6 text-center">
@@ -167,10 +216,43 @@ export default function WorldMap({
         </div>
       )}
 
-      {/* Online count */}
-      <div className="absolute bottom-4 left-4 rounded-full bg-zinc-900/80 px-3 py-1.5 text-xs text-zinc-300 backdrop-blur">
-        {peers.length} online
+      {/* Online HUD */}
+      <div className="pulse-hud" aria-label="Live presence status">
+        <span className="pulse-hud-dot" aria-hidden="true" />
+        <span className="pulse-hud-count">{peers.length}</span>
+        <span className="text-zinc-400">online</span>
+        {region && (
+          <>
+            <span className="pulse-hud-divider" aria-hidden="true" />
+            <span className="pulse-hud-region">{region}</span>
+          </>
+        )}
       </div>
+
+      {/* Leave / disconnect button */}
+      <button
+        type="button"
+        onClick={handleLeave}
+        className="pulse-hud-leave"
+        title="Leave Pulse"
+        aria-label="Leave Pulse"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M16 17l5 -5 -5 -5" />
+          <path d="M21 12H9" />
+          <path d="M9 21H5a2 2 0 0 1 -2 -2V5a2 2 0 0 1 2 -2h4" />
+        </svg>
+      </button>
     </div>
   );
 }
