@@ -6,6 +6,7 @@ import WorldMap from "./components/WorldMap";
 import ConnectionPrompt from "./components/ConnectionPrompt";
 import ChatPanel, { type ChatMessage } from "./components/ChatPanel";
 import VideoPanel from "./components/VideoPanel";
+import StatusPill from "./components/StatusPill";
 import Toast, { type ToastVariant } from "./components/Toast";
 import { join, leave, poll, sendSignal } from "@/lib/api";
 import { PeerSession, type DescType, type PeerControl } from "@/lib/webrtc";
@@ -457,15 +458,13 @@ export default function Home() {
       {notice && <Toast message={notice.message} variant={notice.variant} />}
 
       {conn.kind === "requesting" && (
-        <div className="absolute left-1/2 top-20 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
-          <span>Requesting connection…</span>
-          <button
-            onClick={cancelRequest}
-            className="rounded-full bg-zinc-700 px-3 py-1 text-xs hover:bg-zinc-600"
-          >
-            Cancel
-          </button>
-        </div>
+        <StatusPill
+          text="Requesting connection…"
+          position="top"
+          variant="arc"
+          actionLabel="Cancel"
+          onAction={cancelRequest}
+        />
       )}
 
       {conn.kind === "incoming" && (
@@ -483,6 +482,7 @@ export default function Home() {
           messages={messages}
           connected={conn.kind === "connected"}
           videoBusy={video !== "none"}
+          peerId={conn.peerId}
           onSend={(text) => {
             peerRef.current?.sendChat(text);
             addMessage(true, text);
@@ -493,9 +493,11 @@ export default function Home() {
       )}
 
       {video === "requesting" && (
-        <div className="absolute bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full bg-zinc-800/90 px-4 py-2 text-sm text-zinc-100 shadow-lg backdrop-blur">
-          Waiting for stranger to accept video…
-        </div>
+        <StatusPill
+          text="Waiting for stranger to accept video…"
+          position="bottom"
+          variant="dot"
+        />
       )}
 
       {video === "incoming" && (

@@ -8,10 +8,99 @@ export interface ChatMessage {
   text: string;
 }
 
+// Same color-hash as WorldMap.tsx — keeps the chat avatar visually bound
+// to the dot on the map that the user is talking to.
+function avatarColor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  }
+  return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`;
+}
+
+function PaperPlaneIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M22 2 11 13" />
+      <path d="M22 2 15 22l-4 -9 -9 -4 20 -7z" />
+    </svg>
+  );
+}
+
+function VideoIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="6" width="14" height="12" rx="2" />
+      <path d="M17 10l4 -2v8l-4 -2z" />
+    </svg>
+  );
+}
+
+function EndIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 13a9 9 0 0 1 18 0" />
+      <path
+        d="M16 16.5l3.5 -3.5h2v-3a2 2 0 0 0 -2 -2h-3v2l-3.5 3.5"
+        transform="translate(0 -1)"
+      />
+    </svg>
+  );
+}
+
+function BubbleIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 12a8 8 0 0 1 -11.5 7.2L3 21l1.8 -6.5A8 8 0 1 1 21 12z" />
+    </svg>
+  );
+}
+
 export default function ChatPanel({
   messages,
   connected,
   videoBusy,
+  peerId,
   onSend,
   onStartVideo,
   onEnd,
@@ -19,12 +108,14 @@ export default function ChatPanel({
   messages: ChatMessage[];
   connected: boolean;
   videoBusy: boolean;
+  peerId: string;
   onSend: (text: string) => void;
   onStartVideo: () => void;
   onEnd: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const color = avatarColor(peerId);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,73 +129,97 @@ export default function ChatPanel({
     setDraft("");
   }
 
+  const sendEnabled = connected && draft.trim().length > 0;
+
   return (
-    <div className="absolute inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl">
-      <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
-        <div>
-          <p className="font-semibold">Stranger</p>
-          <p className="text-xs text-zinc-500">
-            {connected ? "Connected" : "Connecting…"}
-          </p>
+    <aside className="pulse-chat">
+      {/* Header */}
+      <header className="pulse-chat-header">
+        <div className="pulse-chat-peer">
+          <span
+            className="pulse-chat-avatar"
+            style={{ background: color, color }}
+            aria-hidden="true"
+          />
+          <div className="pulse-chat-meta">
+            <span className="pulse-chat-name">Stranger</span>
+            <span
+              className="pulse-chat-status"
+              data-state={connected ? "connected" : "connecting"}
+            >
+              <span className="pulse-chat-status-dot" aria-hidden="true" />
+              {connected ? "Connected" : "Connecting…"}
+            </span>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="pulse-chat-actions">
           <button
             onClick={onStartVideo}
             disabled={!connected || videoBusy}
-            className="rounded-full border border-zinc-700 px-3 py-1.5 text-sm hover:border-zinc-500 disabled:opacity-40"
+            className="pulse-btn"
+            aria-label="Start video call"
+            title="Start video"
           >
-            Video
+            <VideoIcon />
+            <span className="hidden sm:inline">Video</span>
           </button>
           <button
             onClick={onEnd}
-            className="rounded-full bg-red-500 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-400"
+            className="pulse-btn pulse-btn-ghost"
+            aria-label="End chat"
+            title="End chat"
           >
-            End
+            <EndIcon />
+            <span className="hidden sm:inline">End</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-4">
-        {messages.length === 0 && (
-          <p className="mt-8 text-center text-sm text-zinc-500">
-            Say hello. Messages are peer-to-peer and never stored.
-          </p>
-        )}
-        {messages.map((m) => (
-          <div
-            key={m.id}
-            className={`flex ${m.mine ? "justify-end" : "justify-start"}`}
-          >
-            <span
-              className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-                m.mine
-                  ? "bg-emerald-400 text-zinc-950"
-                  : "bg-zinc-800 text-zinc-100"
-              }`}
-            >
-              {m.text}
+      {/* Messages */}
+      <div className="pulse-chat-messages">
+        {messages.length === 0 ? (
+          <div className="pulse-chat-empty">
+            <span className="pulse-chat-empty-icon" aria-hidden="true">
+              <BubbleIcon />
+            </span>
+            <span>Say hello.</span>
+            <span className="text-xs text-zinc-500">
+              Messages are peer-to-peer and never stored.
             </span>
           </div>
-        ))}
+        ) : (
+          messages.map((m) => (
+            <div
+              key={m.id}
+              className={`pulse-msg ${m.mine ? "pulse-msg-mine" : "pulse-msg-them"}`}
+            >
+              <span className="pulse-msg-bubble">{m.text}</span>
+            </div>
+          ))
+        )}
         <div ref={endRef} />
       </div>
 
-      <form onSubmit={submit} className="flex gap-2 border-t border-zinc-800 p-3">
+      {/* Composer */}
+      <form onSubmit={submit} className="pulse-chat-composer">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={connected ? "Type a message…" : "Connecting…"}
           disabled={!connected}
-          className="flex-1 rounded-full bg-zinc-900 px-4 py-2 text-sm outline-none placeholder:text-zinc-600 focus:ring-1 focus:ring-emerald-400 disabled:opacity-50"
+          className="pulse-chat-input"
+          aria-label="Message"
         />
         <button
           type="submit"
-          disabled={!connected || !draft.trim()}
-          className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40"
+          disabled={!sendEnabled}
+          className={`pulse-chat-send ${sendEnabled ? "pulse-chat-send-pulse" : ""}`}
+          aria-label="Send"
+          title="Send"
         >
-          Send
+          <PaperPlaneIcon />
         </button>
       </form>
-    </div>
+    </aside>
   );
 }

@@ -27,36 +27,70 @@ export default function VideoPanel({
   }, [remoteStream]);
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-black">
-      <div className="relative flex-1">
+    <div className="pulse-video">
+      <div className="pulse-video-stage">
         {/* Remote (full screen) */}
         <video
           ref={remoteRef}
           autoPlay
           playsInline
-          className="h-full w-full bg-zinc-900 object-cover"
+          className="pulse-video-remote"
         />
+
+        {/* Vignette for cinematic feel */}
+        <div className="pulse-video-vignette" aria-hidden="true" />
+
+        {/* Name pill (top-left) */}
+        <div className="pulse-video-name" aria-label="Stranger">
+          <span className="pulse-video-name-dot" aria-hidden="true" />
+          Stranger
+        </div>
+
+        {/* Waiting state */}
         {!remoteStream && (
-          <div className="absolute inset-0 flex items-center justify-center text-zinc-500">
-            Waiting for stranger&rsquo;s video…
+          <div className="pulse-video-waiting" aria-live="polite">
+            <div className="pulse-video-waiting-ring" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <span>Waiting for stranger&rsquo;s video…</span>
           </div>
         )}
+
         {/* Local (picture-in-picture) */}
-        <video
-          ref={localRef}
-          autoPlay
-          playsInline
-          muted
-          className="absolute bottom-4 right-4 h-40 w-28 rounded-lg border border-zinc-700 bg-zinc-800 object-cover"
-        />
-      </div>
-      <div className="flex justify-center bg-zinc-950 p-4">
-        <button
-          onClick={onEnd}
-          className="rounded-full bg-red-500 px-8 py-3 font-semibold text-white hover:bg-red-400"
-        >
-          End video
-        </button>
+        <div className="pulse-video-pip">
+          <video ref={localRef} autoPlay playsInline muted />
+        </div>
+
+        {/* Floating control bar */}
+        <div className="pulse-video-controls">
+          <button
+            onClick={onEnd}
+            className="pulse-btn pulse-btn-end"
+            aria-label="End video call"
+            title="End video"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 13a9 9 0 0 1 18 0" />
+              <path d="M21 13v-3a2 2 0 0 0 -2 -2h-3" />
+              <path d="M3 13v-3a2 2 0 0 1 2 -2h3" />
+              <path d="M9 17l-1.5 -1.5" />
+              <path d="M15 17l1.5 -1.5" />
+            </svg>
+            <span>End</span>
+          </button>
+        </div>
       </div>
     </div>
   );
