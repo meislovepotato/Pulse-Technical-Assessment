@@ -73,7 +73,7 @@ export default function EntryGate({
       {/* Foreground content */}
       <div className="relative z-10 flex flex-col items-center gap-8 text-center">
         <div className="pulse-rise pulse-rise-1">
-          <span className="pulse-wordmark">
+          <span className="pulse-wordmark pulse-display">
             <PulseGlyph className="pulse-wordmark-icon" />
             Pulse
           </span>
