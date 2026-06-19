@@ -640,3 +640,76 @@ Replaced the flat `bg-zinc-800/90` pill with a glass-morphism toast:
 - `npx tsc --noEmit` — clean.
 - `npx eslint app/` — clean (fixed one `react-hooks/set-state-in-effect` by deriving the region from a `useState` initializer instead of an effect).
 - Mapbox attribution and existing dark-v11 style preserved; map controls unchanged.
+
+## Phase 2 — UI Polish (Tier 2)
+
+UI-only follow-up: refine the modal, the chat, the video call, and the
+transient status pills. Added a small shared button system so the surfaces
+feel of-a-piece.
+
+### 1. Shared button system (`app/globals.css`)
+
+- `.pulse-btn` base (pill, transition, focus/disabled states, active scale).
+- `.pulse-btn-ghost` — for cancel/end; turns danger-tinted on hover.
+- `.pulse-btn-gradient` — emerald→cyan gradient with shimmer sweep + glow;
+  reused on the entry screen and the prompt's Accept.
+- `.pulse-btn-round`, `.pulse-btn-end` — for the video control bar.
+
+### 2. ConnectionPrompt (`app/components/ConnectionPrompt.tsx`)
+
+- Radial-gradient backdrop that highlights the modal area instead of a flat
+  black/60 wash.
+- Modal-card entrance animation (`pulse-modal-backdrop` + `pulse-modal-card`).
+- A pulse-ring glyph above the title that echoes the map dots.
+- Decline → ghost button (tints red on hover); Accept → gradient button.
+
+### 3. StatusPill (`app/components/StatusPill.tsx`, new)
+
+Replaces the two `bg-zinc-800/90` flat pills:
+- Glass-morphism pill with slide-in entrance.
+- Two variants: `arc` (spinning ring) for "Requesting connection" and `dot`
+  (pulsing dot) for "Waiting for stranger to accept video…".
+- Optional inline `Cancel` action button.
+- Used at top-center (requesting) and bottom-center (video waiting).
+
+### 4. ChatPanel (`app/components/ChatPanel.tsx`)
+
+- New `peerId` prop drives a color-hashed avatar in the header (same hash as
+  the map dot, so the chat visually belongs to the dot you tapped).
+- Status dot in the header turns emerald + blinks when connected, amber while
+  connecting.
+- Messages: gradient emerald→cyan for "mine" with a soft glow, neutral
+  glass-style for "them", tails via asymmetric border-radius, fade+slide
+  entry animation, scroll-to-bottom on new message.
+- Empty state: speech-bubble icon inside a glass chip + a one-liner about
+  P2P privacy.
+- Composer: glass input with a soft focus ring; send button is a paper-plane
+  SVG in a gradient circle that gently pulses when the draft is non-empty.
+- Header actions: Video and End both use the new button system; "End" is
+  the ghost variant (red on hover) instead of a solid red block.
+
+### 5. VideoPanel (`app/components/VideoPanel.tsx`)
+
+- Cinematic vignette overlay on the remote video.
+- Top-left "Stranger" name pill with a red live-dot.
+- Waiting state: animated concentric rings (3 staggered) instead of plain
+  text.
+- Picture-in-picture: rounded card with a soft border and a subtle scale on
+  hover.
+- Bottom-center frosted control bar with a gradient-pink "End" button
+  (red→pink) — visually distinct from the chat's neutral End.
+
+### Decision: video mic/cam toggles
+
+The earlier Tier-2 spec mentioned mic/cam toggle buttons in the video control
+bar. I intentionally did **not** add them — toggling local media tracks
+would be a logic change (muting `MediaStream` tracks, signaling peer, etc.),
+which is out of scope for UI-only. The control bar is shipped with just the
+End button for now; adding toggles later only requires wiring the existing
+local stream.
+
+### Verification
+
+- `npx tsc --noEmit` — clean.
+- `npx eslint app/` — clean.
+- `npx next build` — compiled successfully (8.9s, Turbopack).
